@@ -1,0 +1,4 @@
+INFO:WDM:====== WebDriver manager ======
+INFO:WDM:Get LATEST chromedriver version for google-chrome 111.0.5563
+INFO:WDM:Driver [C:\Users\Universal\.wdm\drivers\chromedriver\win32\111.0.5563\chromedriver.exe] found in cache
+INFO:root:Minha mensagem de informação
