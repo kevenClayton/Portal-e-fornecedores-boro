@@ -29,6 +29,7 @@ motoristas = dados['motoristas']
 motoristas_destinos = dados['motorista_destino']
 motoristas_tipo_veiculo = dados['motoristas_tipo_veiculo']
 ehMesmoDestinoCodigo = 0
+ehMesmoDestinoCodigoVincular = 0
 
 nome_arquivo = os.path.basename(sys.argv[0])
 data_atual = datetime.now().strftime('%d-%m-%Y')
@@ -47,6 +48,14 @@ def saberUltimaRotaEnviouEmail(codigo):
         return True
     else:
         ehMesmoDestinoCodigo = codigo
+        return False
+
+def saberUltimaRotaEntrouVincular(codigo):
+    global ehMesmoDestinoCodigoVincular
+    if codigo == ehMesmoDestinoCodigoVincular:
+        return True
+    else:
+        ehMesmoDestinoCodigoVincular = codigo
         return False
 
 def listarTodasRotas(driver,window):
@@ -119,13 +128,14 @@ def selecionarOrigemDestino(driver,window,interface):
 
         #VALIDANDO SE EXISTEM OS VALUE DA ORIGEM DENTRO DO SELECT
         ExisteOrigem = ValidarSelect(driver, IdSelectOrigem, origem)
+        ExisteOrigem = True
 
         if ExisteOrigem == True:
             #CASO EXISTA OS VALUES DENTRO ELE SELECIONA O VALOR
-            select = Select(driver.find_element("id", 'ctlLoadedControl_ddlOrigem'))
-            select.select_by_value(origem)
-            logging.info('Clicou na origem')
-            logging.info(origem)
+            # select = Select(driver.find_element("id", 'ctlLoadedControl_ddlOrigem'))
+            # select.select_by_value(origem)
+            # logging.info('Clicou na origem')
+            # logging.info(origem)
 
             verificarSeExisteDestinoEFiltrar(driver, window, origem)
 
@@ -152,6 +162,9 @@ def verificarSeExisteDestinoEFiltrar(driver,window, origem):
 
     for destino in options:
         if destino.strip() in arrayDestinos:
+            jaEntrouParaVincular = saberUltimaRotaEntrouVincular(destino.strip())
+            if jaEntrouParaVincular == True:
+                continue
             status = ('Verificando cluster existente em nossa base de dados: ' + destino)
             print(status)
             window['-OUTPUT-'].update(status)
@@ -228,6 +241,8 @@ def verificarCadaResultadoRota(driver,window, origem, destino):
 
 
                     if clientesComMesmoDestino[0] == True:
+
+
                         driver.find_element("id", idBotaoVincular).click()
                         logging.info('Clicou no botao vincular veiculo na listagem:')
                         logging.info(rota)
@@ -272,11 +287,13 @@ def vincularMotoristaNaRota(transporteSelecionado, destino, temLetraB, numeroDoc
     global motoristas_destinos
     global motoristas_tipo_veiculo
     global ehMesmoDestinoCodigo
+    global ehMesmoDestinoCodigoVincular
 
+    ehMesmoDestinoCodigoVincular = destino
     logging.info('@vincularMotoristaNaRota')
     logging.info(destino)
 
-    dados = db.DADOS(cliente)
+    dados = db.DADOS()
     motoristas = dados['motoristas']
     motoristas_destinos = dados['motorista_destino']
 

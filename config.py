@@ -2,12 +2,12 @@ global cliente
 global fundo
 
 # cliente = 'boro'
-# cliente = 'madeforte'
-cliente = 'rttransportes'
+cliente = 'madeforte'
+# cliente = 'rttransportes'
 
 # fundo = '#011a41' #boro
-# fundo = '#011a41' #madeforte
-fundo = '#fc9917' #rttransportes
+fundo = '#2b6600' #madeforte
+# fundo = '#fc9917' #rttransportes
 
 conexoes = {
     'madeforte': {
