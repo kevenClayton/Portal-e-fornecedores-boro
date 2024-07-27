@@ -52,7 +52,7 @@ def teste():
             print("Hora clicou em fechar =", current_time)
 
 
-            time.sleep(3)
+            # time.sleep(3)
             break
         elif event == 'Buscar e aceitar rotas':
             valid = 0
@@ -101,7 +101,9 @@ while True:
                     else:
                         break
                     if interface == True:
-                        ListandoRotas2.selecionarOrigemDestino(driver,window,interface)
+                        # ListandoRotas2.selecionarOrigemDestino(driver,window,interface)
+                        ListandoRotas2.verificarSeExisteDestinoEFiltrar(driver, window)
+
                     else:
                         break
                 else:
@@ -119,12 +121,12 @@ while True:
                         break
 
                     if interface == True:
-                        ListandoRotas2.selecionarOrigemDestino(driver,window,interface)
+                        ListandoRotas2.verificarSeExisteDestinoEFiltrar(driver, window)
                     else:
                         break
             else:
                 window['-OUTPUT-'].update('SELECIONE PARA INICIAR.')
-                time.sleep(1)
+                # time.sleep(1)
 
                 if valid == 1:
                     break

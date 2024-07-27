@@ -19,10 +19,10 @@ def enviarEmailRotaVinculada(motorista, numeroDocumento):
     server = smtplib.SMTP('smtp.uni5.net', 587)
     server.ehlo()
     server.starttls
-    server.login("envio@reservaai.com.br", 'Secpol@2')
+    server.login("envio@maranatatecnologia.com.br", 'Secpol@2')
     parametros = db.PARAMETROS()
 
-    msg["From"] = "envio@reservaai.com.br"
+    msg["From"] = "envio@maranatatecnologia.com.br"
     msg["To"] = parametros[0][5]
     msg["Cc"] = ""
 
@@ -44,11 +44,11 @@ def enviarEmailRotaComDestinoDiferente(numeroDocumento):
     server = smtplib.SMTP('smtp.uni5.net', 587)
     server.ehlo()
     server.starttls
-    server.login("envio@reservaai.com.br", 'Secpol@2')
+    server.login("envio@maranatatecnologia.com.br", 'Secpol@2')
 
     parametros = db.PARAMETROS()
 
-    msg["From"] = "envio@reservaai.com.br"
+    msg["From"] = "envio@maranatatecnologia.com.br"
     msg["To"] =  parametros[0][5]
     msg["Cc"] = ""
 
@@ -69,11 +69,11 @@ def enviarEmailGenerico(assunto = "", texto = ""):
     server = smtplib.SMTP('smtp.uni5.net', 587)
     server.ehlo()
     server.starttls
-    server.login("envio@reservaai.com.br", 'Secpol@2')
+    server.login("envio@maranatatecnologia.com.br", 'Secpol@2')
 
     parametros = db.PARAMETROS()
 
-    msg["From"] = "envio@reservaai.com.br"
+    msg["From"] = "envio@maranatatecnologia.com.br"
     msg["To"] = parametros[0][5]
     msg["Cc"] = ''
 

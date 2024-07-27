@@ -52,7 +52,7 @@ def saberUltimaRotaEnviouEmail(codigo):
 
 def saberUltimaRotaEntrouVincular(codigo):
     global ehMesmoDestinoCodigoVincular
-    if codigo == ehMesmoDestinoCodigoVincular:
+    if codigo == ehMesmoDestinoCodigoVincular:        
         return True
     else:
         ehMesmoDestinoCodigoVincular = codigo
@@ -64,24 +64,24 @@ def listarTodasRotas(driver,window):
     #clicar em selecionar empresa
     driver.find_element("id","mnuPrincipal_lstEmpresas").click()
 
-    time.sleep(0.5)
+    time.sleep(1)
 
     #seleciona a empresa soluções usiminas que tem o valor 85
     driver.find_element("id", "mnuPrincipal_lstEmpresas").send_keys("85", Keys.ARROW_DOWN)
-    time.sleep(0.2)
+    time.sleep(1)
     select = Select(driver.find_element("id", 'mnuPrincipal_lstEmpresas'))
     select.select_by_value("85")
 
-    time.sleep(0.5)
+    time.sleep(1)
 
     #redireciona para a pagina que esta na url
     driver.get('https://portal.e-fornecedores.ind.br/Default.aspx?cmp=SUCargaProgramada.ascx&tipo=vnc&menu=yes')
-    time.sleep(0.5)
+    time.sleep(1)
     #clica no botão pesquisar
     driver.find_element("id", "ctlLoadedControl_btnPesquisa").click()
 
 #pausa
-time.sleep(0.3)
+time.sleep(1)
 
 def ValidarSelect(driver,IdSelect,destino):
     existe = False
@@ -137,14 +137,14 @@ def selecionarOrigemDestino(driver,window,interface):
             # logging.info('Clicou na origem')
             # logging.info(origem)
 
-            verificarSeExisteDestinoEFiltrar(driver, window, origem)
+            verificarSeExisteDestinoEFiltrar(driver, window)
 
         else:
             status = ('Origem não encontrada no filtro, ORIGEM: ' + origem )
             print(status)
             window['-OUTPUT-'].update(status)
 
-def verificarSeExisteDestinoEFiltrar(driver,window, origem):
+def verificarSeExisteDestinoEFiltrar(driver,window):
     arrayDestinos = np.array(destinos)
     existe = False
     select ='ctlLoadedControl_ddlCluster'
@@ -164,6 +164,7 @@ def verificarSeExisteDestinoEFiltrar(driver,window, origem):
         if destino.strip() in arrayDestinos:
             jaEntrouParaVincular = saberUltimaRotaEntrouVincular(destino.strip())
             if jaEntrouParaVincular == True:
+                logging.info('Já entrou nessa rota, tentando próximo destino: ' + str(destino.strip()))
                 continue
             status = ('Verificando cluster existente em nossa base de dados: ' + destino)
             print(status)
@@ -171,7 +172,7 @@ def verificarSeExisteDestinoEFiltrar(driver,window, origem):
             select = Select(driver.find_element('id', select))
             select.select_by_value(destino.strip())
             filtrar(driver)
-            verificarCadaResultadoRota(driver, window, origem, destino)
+            verificarCadaResultadoRota(driver, window, destino)
             existe = True
             logging.info('Existe o destino')
             logging.info(destino)
@@ -187,15 +188,13 @@ def filtrar(driver):
     print("Clicando em filtrar rota")
     driver.find_element("id", "ctlLoadedControl_btnFiltrar").click()
 
-def verificarCadaResultadoRota(driver,window, origem, destino):
+def verificarCadaResultadoRota(driver,window, destino):
     htmlprod = driver.page_source
     htmlprod = BeautifulSoup(htmlprod, 'lxml')
     htmlprod = htmlprod.find('table', id='ctlLoadedControl_dgRight')
     linhas = htmlprod.findChildren('tr')
     tabelacompleta = pd.read_html(str(htmlprod), skiprows=1)[0]
     tabelafull = tabelacompleta.to_dict('split')['data']
-
-
 
     for rota in tabelafull:
         numeroDocumento = rota[0]
@@ -253,7 +252,7 @@ def verificarCadaResultadoRota(driver,window, origem, destino):
                             print('Rota encontrada com destino diferente, porém já enviou o e-mail 1x')
                         else:
                             # enviarEmail.enviarEmailRotaComDestinoDiferente(numeroDocumento)
-                            gravarRotasRelatorio(origem, destino, numeroDocumento, data, valorCarga, tpTransporte,pesoTotal, obervacoes, prioridade, todosDestinos, maiorQueUmDestinos,"Rota com destino diferente")
+                            gravarRotasRelatorio(plantaOrigem, destino, numeroDocumento, data, valorCarga, tpTransporte,pesoTotal, obervacoes, prioridade, todosDestinos, maiorQueUmDestinos,"Rota com destino diferente")
                             status = 'Rota encontrada com destino diferente, dados: origem: ' + plantaOrigem + ' cluster: ' + clientesComMesmoDestino[1] + 'estado:' + estado + ' valor carga: ' + valorCarga + ' tptransporte:' + tpTransporte + ' peso: ' + str(pesoTotal) + ' doc:' + str(numeroDocumento) + ''
                             status = unidecode.unidecode(status)
                             print(status)
@@ -265,10 +264,10 @@ def verificarCadaResultadoRota(driver,window, origem, destino):
                     driver.back()
                 # Valor maiior
                 else:
-                    gravarRotasRelatorio(origem, destino, numeroDocumento, data, valorCarga, tpTransporte, pesoTotal,obervacoes, prioridade, todosDestinos, maiorQueUmDestinos, "Valor maior que o configurado")
+                    gravarRotasRelatorio(plantaOrigem, destino, numeroDocumento, data, valorCarga, tpTransporte, pesoTotal,obervacoes, prioridade, todosDestinos, maiorQueUmDestinos, "Valor maior que o configurado")
             # não atende tipo veiculo
             else:
-                gravarRotasRelatorio(origem, destino, numeroDocumento, data, valorCarga, tpTransporte, pesoTotal, obervacoes, prioridade, todosDestinos, maiorQueUmDestinos, "Não possui tipo veículo")
+                gravarRotasRelatorio(plantaOrigem, destino, numeroDocumento, data, valorCarga, tpTransporte, pesoTotal, obervacoes, prioridade, todosDestinos, maiorQueUmDestinos, "Não possui tipo veículo")
 
 
 
@@ -437,7 +436,9 @@ def vincularMotoristaNaRota(transporteSelecionado, destino, temLetraB, numeroDoc
 
                                     #driver.back()
                                     listarTodasRotas(driver, window)
-                                    selecionarOrigemDestino(driver, window, True)
+                                    verificarSeExisteDestinoEFiltrar(driver, window)
+
+                                    # selecionarOrigemDestino(driver, window, True)
                                     break
                                 else:
                                     driver.back()
@@ -483,7 +484,7 @@ def vincularMotoristaNaRota(transporteSelecionado, destino, temLetraB, numeroDoc
     else:
         gravarRotasRelatorio(origem, destino, numeroDocumento, data, valorCarga, tpTransporte, pesoTotal, obervacoes,prioridade, todosDestinos, maiorQueUmDestinos, "Motorista tem motorista para o destino")
         listarTodasRotas(driver, window)
-        selecionarOrigemDestino(driver, window, True)
+        verificarSeExisteDestinoEFiltrar(driver, window)
 def pegandoIdBotaoVincular(linhas, numeroDocumento):
     idBotao = ''
     quantLinhas = len(linhas)

@@ -13,7 +13,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.select import Select
 from urllib.parse import urlparse
 from urllib.parse import parse_qs
-
+import time
 def fazendoLogin(driver,login):
     url = 'https://portal.e-fornecedores.ind.br/'
 
@@ -39,7 +39,7 @@ def fazendoLogin(driver,login):
     driver.find_element("id","ctlLoadedControl_btnOK").click()
 
 def verificandoSeTaLogado(driver):
-
+    time.sleep(2)
     driver.refresh()
     logado = False
 
