@@ -54,9 +54,6 @@ def saberUltimaRotaEntrouVincular(codigo):
     global ehMesmoDestinoCodigoVincular
     if codigo == ehMesmoDestinoCodigoVincular:        
         return True
-    else:
-        ehMesmoDestinoCodigoVincular = codigo
-        return False
 
 def listarTodasRotas(driver,window):
 
@@ -64,19 +61,19 @@ def listarTodasRotas(driver,window):
     #clicar em selecionar empresa
     driver.find_element("id","mnuPrincipal_lstEmpresas").click()
 
-    time.sleep(1)
+    time.sleep(0.2)
 
     #seleciona a empresa soluções usiminas que tem o valor 85
     driver.find_element("id", "mnuPrincipal_lstEmpresas").send_keys("85", Keys.ARROW_DOWN)
-    time.sleep(1)
+    time.sleep(0.2)
     select = Select(driver.find_element("id", 'mnuPrincipal_lstEmpresas'))
     select.select_by_value("85")
 
-    time.sleep(1)
+    time.sleep(0.2)
 
     #redireciona para a pagina que esta na url
     driver.get('https://portal.e-fornecedores.ind.br/Default.aspx?cmp=SUCargaProgramada.ascx&tipo=vnc&menu=yes')
-    time.sleep(1)
+    time.sleep(0.2)
     #clica no botão pesquisar
     driver.find_element("id", "ctlLoadedControl_btnPesquisa").click()
 
@@ -162,15 +159,12 @@ def verificarSeExisteDestinoEFiltrar(driver,window):
 
     for destino in options:
         if destino.strip() in arrayDestinos:
-            jaEntrouParaVincular = saberUltimaRotaEntrouVincular(destino.strip())
-            if jaEntrouParaVincular == True:
-                logging.info('Já entrou nessa rota, tentando próximo destino: ' + str(destino.strip()))
-                continue
             status = ('Verificando cluster existente em nossa base de dados: ' + destino)
             print(status)
             window['-OUTPUT-'].update(status)
             select = Select(driver.find_element('id', select))
             select.select_by_value(destino.strip())
+            time.sleep(1)
             filtrar(driver)
             verificarCadaResultadoRota(driver, window, destino)
             existe = True
@@ -207,6 +201,7 @@ def verificarCadaResultadoRota(driver,window, destino):
         plantaOrigem = rota[10]
         cluster = rota[11]
         estado = rota[12]
+        time.sleep(1)
         obervacoes = validarLetraProduto.pegarObservacoesRota(driver, numeroDocumento)
         valorCarga =  pegarValorObservacao.tratarValorNoCampoObservacao(driver, numeroDocumento).strip().split(',')[0]
         temLetraB = validarLetraProduto.verificarTemLetraB(driver, numeroDocumento)
@@ -215,6 +210,11 @@ def verificarCadaResultadoRota(driver,window, destino):
         todosDestinos = clientesComMesmoDestino[1]
         maiorQueUmDestinos = False
         clientesComMesmoDestino[0] = True
+
+        jaEntrouParaVincular = saberUltimaRotaEntrouVincular(numeroDocumento)
+        if jaEntrouParaVincular == True:
+            logging.info('Já entrou nessa rota, tentando próximo destino: ' + str(numeroDocumento))
+            continue
 
         if (maisDeUmDestino > 1):
             maiorQueUmDestinos = True
@@ -285,20 +285,21 @@ def vincularMotoristaNaRota(transporteSelecionado, destino, temLetraB, numeroDoc
     global motoristas
     global motoristas_destinos
     global motoristas_tipo_veiculo
+    global motoristas_tipo_veiculo_carreta
     global ehMesmoDestinoCodigo
     global ehMesmoDestinoCodigoVincular
 
-    ehMesmoDestinoCodigoVincular = destino
+    ehMesmoDestinoCodigoVincular = numeroDocumento
     logging.info('@vincularMotoristaNaRota')
     logging.info(destino)
 
     dados = db.DADOS()
     motoristas = dados['motoristas']
     motoristas_destinos = dados['motorista_destino']
-
+    origens = dados['origens']
     logging.info('@motoristas')
     logging.info(motoristas)
-
+    motoristas_tipo_veiculo_carreta = dados['motoristas_tipo_veiculo_carreta']
     for motorista in motoristas:
         print(motorista)
         idNoBanco = motorista[0]
@@ -308,23 +309,22 @@ def vincularMotoristaNaRota(transporteSelecionado, destino, temLetraB, numeroDoc
         nome = motorista[3]
         aceitaBobina = motorista[8]
         situacao = motorista[9]
-
+        try:
+            placaCarreta = motorista[13]
+        except IndexError:
+            placaCarreta = ""  # Ou qualquer valor padrão desejado
+        
         if temLetraB == True and aceitaBobina != 1:
             print("motorista não aceita bobina", nome)
             continue
         elif situacao == 1:
             print("situacao motorista ok!")
             arrayMotoristaDestinos = np.array(motoristas_destinos)
-            if destino in arrayMotoristaDestinos:
+            arrayMotoristaOrigens = np.array(origens)
+            origem = origem.upper()
+            if destino in arrayMotoristaDestinos and origem in arrayMotoristaOrigens:
                 destinoMotoristaEncontrado = np.where(arrayMotoristaDestinos == destino)[0]
-                # indexMotoristaEncontrado = np.where(arrayMotoristaDestinos == idNoBanco)[0]
-                #
-                # indexMotoristaEncontrado = np.where(destinoMotoristaEncontrado == indexMotoristaEncontrado)
-                #
-                #
-                # if(len(indexMotoristaEncontrado[0]) > 0 ):
-                #     destinoMotoristaEncontrado = arrayMotoristaDestinos[indexMotoristaEncontrado]
-                #
+             
                 for motoristaIndex in destinoMotoristaEncontrado:
                     if int(arrayMotoristaDestinos[motoristaIndex][0]) == idNoBanco:
                         motoristaCerto = True
@@ -344,9 +344,16 @@ def vincularMotoristaNaRota(transporteSelecionado, destino, temLetraB, numeroDoc
                             print(status)
                             window['-OUTPUT-'].update(status)
                             #=========AGORA PREENCHER OS DADOS E VINCULAR==========
+                            arrayMotoristaTipoVeiculoCarreta = np.array(motoristas_tipo_veiculo_carreta)
+
                             #PREENCHE A PLACA DO VEICULO
                             driver.find_element("id", "ctlLoadedControl_txtPlaca1").clear()
                             driver.find_element("id", "ctlLoadedControl_txtPlaca1").send_keys(placa)
+                            
+                            if(transporteSelecionado in arrayMotoristaTipoVeiculoCarreta and placaCarreta != ""):
+                                driver.find_element("id", "ctlLoadedControl_txtPlaca2").clear()
+                                driver.find_element("id", "ctlLoadedControl_txtPlaca2").send_keys(placaCarreta)
+                            
                             driver.find_element("id", "ctlLoadedControl_btnBuscarVeiculo").click()
                             time.sleep(0.5)
                             try:
@@ -392,6 +399,13 @@ def vincularMotoristaNaRota(transporteSelecionado, destino, temLetraB, numeroDoc
                             if parametros[0][4] == 0: #Se é modo teste ou não
                                 #===================BOTÃO VINCULAR====================
                                 driver.find_element("id", "ctlLoadedControl_btnSalvar").click()
+                                try:
+                                    alert = driver.switch_to.alert  # This .alert will work For Python
+                                    print('Alerta texto: ' + alert.text)
+                                    alert.accept()
+                                except:
+                                    print('Não tem alerta depois que vinculou, continuando...')
+
                                 textoAoClicarVincular = driver.find_element("id", "ctlLoadedControl_lblMessage").text
                                 textoObservacao = driver.find_element("id", "ctlLoadedControl_txtObs").text
 

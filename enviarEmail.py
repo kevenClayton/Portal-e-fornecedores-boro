@@ -16,13 +16,13 @@ def enviarEmailRotaVinculada(motorista, numeroDocumento):
     #message = 'Subject: {}\n\n{}'.format(SUBJECT, TEXT)
 
 
-    server = smtplib.SMTP('smtp.uni5.net', 587)
+    server = smtplib.SMTP('smtpi.uni5.net', 587)
     server.ehlo()
     server.starttls
-    server.login("envio@maranatatecnologia.com.br", 'Secpol@2')
+    server.login("envio@keven.dev.br", 'Secpol@2')
     parametros = db.PARAMETROS()
 
-    msg["From"] = "envio@maranatatecnologia.com.br"
+    msg["From"] = "envio@keven.dev.br"
     msg["To"] = parametros[0][5]
     msg["Cc"] = ""
 
@@ -41,14 +41,14 @@ def enviarEmailRotaComDestinoDiferente(numeroDocumento):
     #message = 'Subject: {}\n\n{}'.format(SUBJECT, TEXT)
 
 
-    server = smtplib.SMTP('smtp.uni5.net', 587)
+    server = smtplib.SMTP('smtpi.uni5.net', 587)
     server.ehlo()
     server.starttls
-    server.login("envio@maranatatecnologia.com.br", 'Secpol@2')
+    server.login("envio@keven.dev.br", 'Secpol@2')
 
     parametros = db.PARAMETROS()
 
-    msg["From"] = "envio@maranatatecnologia.com.br"
+    msg["From"] = "envio@keven.dev.br"
     msg["To"] =  parametros[0][5]
     msg["Cc"] = ""
 
@@ -66,14 +66,14 @@ def enviarEmailGenerico(assunto = "", texto = ""):
     msg['Mensagem'] = mensagem.encode('utf-8')
     # message = 'Subject: {}\n\n{}'.format(SUBJECT, TEXT)
 
-    server = smtplib.SMTP('smtp.uni5.net', 587)
+    server = smtplib.SMTP('smtpi.uni5.net', 587)
     server.ehlo()
     server.starttls
-    server.login("envio@maranatatecnologia.com.br", 'Secpol@2')
+    server.login("envio@keven.dev.br", 'Secpol@2')
 
     parametros = db.PARAMETROS()
 
-    msg["From"] = "envio@maranatatecnologia.com.br"
+    msg["From"] = "envio@keven.dev.br"
     msg["To"] = parametros[0][5]
     msg["Cc"] = ''
 

@@ -60,4 +60,26 @@ def verificandoSeTaLogado(driver):
 
     return logado
 
+def verifcaPaginaAcessoSimultaneo(driver):
+    time.sleep(2)
+    driver.refresh()
+    logado = False
+
+    urlAtual = driver.current_url
+
+    if(urlAtual == "data:,"):
+        return logado
+
+    parsed_url = urlparse(urlAtual)
+    parametros = parsed_url.query
+    print(logado)
+
+    if parametros =='cmp=Error.ascx':
+        driver.get('https://portal.e-fornecedores.ind.br/')
+
+    if(parametros != ""):
+        logado = True
+
+    return logado
+
 

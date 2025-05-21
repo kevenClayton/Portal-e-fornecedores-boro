@@ -30,6 +30,7 @@ def DADOS():
 		origens = ("SELECT * FROM origens")
 		parametros = ("SELECT * FROM parametros")
 		motoristas_tipo_veiculo = ("SELECT motorista_id, nome_tipo_veiculo FROM motorista_tipo_veiculo mtv INNER JOIN tipo_veiculo tv ON mtv.tipo_veiculo_id = tv.id inner join motoristas m on m.id = mtv.motorista_id where m.situacao = 1")
+		motoristas_tipo_veiculo_carreta = ("SELECT motorista_id, nome_tipo_veiculo FROM motorista_tipo_veiculo_carreta mtv INNER JOIN tipo_veiculo tv ON mtv.tipo_veiculo_id = tv.id inner join motoristas m on m.id = mtv.motorista_id where m.situacao = 1")
 		tipo_veiculo = ("SELECT * FROM tipo_veiculo")
 		login = ("SELECT * FROM login")
 		select_destinos_motoristas_ativos = ("SELECT d.id, nome_destino  FROM destinos d INNER JOIN motorista_destino md ON   d.id  = md.destino_id INNER JOIN motoristas m on md.motorista_id = m.id where m.situacao = 1 group by destino_id")
@@ -58,6 +59,8 @@ def DADOS():
 
 		cursor.execute(motoristas_tipo_veiculo)
 		dados['motoristas_tipo_veiculo'] = cursor.fetchall()
+		cursor.execute(motoristas_tipo_veiculo_carreta)
+		dados['motoristas_tipo_veiculo_carreta'] = cursor.fetchall()
 
 		cursor.execute(tipo_veiculo)
 		dados['tipo_veiculo'] = cursor.fetchall()

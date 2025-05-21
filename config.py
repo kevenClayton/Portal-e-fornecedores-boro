@@ -1,12 +1,14 @@
 global cliente
 global fundo
 
-# cliente = 'boro'
-cliente = 'madeforte'
+cliente = 'boro'
+# cliente = 'jslogistica'
+# cliente = 'madeforte'
 # cliente = 'rttransportes'
 #
+fundo = '#011a41' #jslogistica
 # fundo = '#011a41' #boro
-fundo = '#2b6600' #madeforte
+# fundo = '#2b6600' #madeforte
 # fundo = '#fc9917' #rttransportes
 
 conexoes = {
@@ -17,9 +19,9 @@ conexoes = {
         'database': 'madeforte',
     },
     'boro': {
-        'host': 'mysql.boro.maranatatecnologia.com.br',
-        'user': 'boro',
-        'password': 'Secpol2',
+        'host': 'reservaai.cgns57eoufkz.us-east-1.rds.amazonaws.com',
+        'user': 'robo',
+        'password': 'D41D8CD98F00B204E9800998ECF8427E',
         'database': 'boro',
     },
     'rttransportes': {
@@ -27,6 +29,12 @@ conexoes = {
         'user': 'rttransportes',
         'password': 'Secpol2',
         'database': 'rttransportes',
+    },
+    'jslogistica': {
+        'host': 'reservaai.cgns57eoufkz.us-east-1.rds.amazonaws.com',
+        'user': 'robo',
+        'password': 'D41D8CD98F00B204E9800998ECF8427E',
+        'database': 'jslogistica',
     }
     # Adicione mais clientes conforme necessário
 }

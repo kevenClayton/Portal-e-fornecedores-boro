@@ -11,6 +11,7 @@ import model.db as db
 import requests
 from config import fundo
 from selenium.webdriver.chrome.service import Service
+import random
 
 
 dados = db.DADOS()
@@ -66,10 +67,15 @@ def teste():
 
 
 
+with open('proxies.txt') as f:
+    proxies = [line.strip() for line in f if line.strip()]
+proxy = random.choice(proxies)
 
 threading.Thread(target=teste).start()
 option = webdriver.ChromeOptions()
 option.headless = False
+option.add_argument(f'--proxy-server=http://{PROXY}')
+
 service = Service()
 
 
@@ -131,6 +137,7 @@ while True:
                 if valid == 1:
                     break
         except Exception as e:
+            driver.get('https://portal.e-fornecedores.ind.br/')
             print('Deu erro aplicação, mas está continuando')
             print('ERRO: ' + str(e))
             pass
