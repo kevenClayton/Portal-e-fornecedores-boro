@@ -178,6 +178,55 @@ def dadosDBParaVincular(id, destino = ""):
 
 	return dadosDBParaVincular
 
+def motoristasDisponivelParaVinculacao(dadosRota, destino, tipoTransporte):
+	dadosDBParaVincular = {}
+	try:
+		#CONECTANDO COM O BANCO DE DADOS.
+		db_connection = mysql.connector.connect \
+		(
+			host=conexoes[cliente]['host'],
+			user=conexoes[cliente]['user'],
+			password=conexoes[cliente]['password'],
+			database=conexoes[cliente]['database']
+		)
+		#SETANDO VARIAVER PRINCIPAL DA BIBLIOTECA.
+		cursor = db_connection.cursor()
+		print("Database connection!")
+
+		if dadosRota.tem_letra_b:
+			cond_bobina = "AND mt.aceita_bobina = 1"
+		else:
+			cond_bobina = ""
+
+		query = f"""
+        SELECT DISTINCT mt.*
+        FROM motoristas mt
+        INNER JOIN motorista_destino md ON mt.id = md.motorista_id
+        INNER JOIN destinos dt ON md.destino_id = dt.id
+        INNER JOIN motorista_tipo_veiculo mtp ON mtp.motorista_id = mt.id
+        INNER JOIN tipo_veiculo tv ON tv.id = mtp.tipo_veiculo_id
+        WHERE mt.situacao = TRUE
+        {cond_bobina}
+        AND LOWER(dt.nome_destino) = '{destino.lower()}'
+        AND LOWER(tv.nome_tipo_veiculo) = '{tipoTransporte.lower()}'
+        ORDER BY ordem_motorista
+        """		
+		cursor.execute(query)
+		dadosDBParaVincular = cursor.fetchall()
+
+
+	#EXIBE OS PROBLEMA CASO TENHA ERRO NO MYSQL
+	except mysql.connector.Error as error:
+		if error.errno == errorcode.ER_BAD_DB_ERROR:
+			print("Database doesn't exist")
+		elif error.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+			print("User name or password is wrong")
+		else:
+			print(error)
+	else:
+		db_connection.close()
+
+	return dadosDBParaVincular
 
 
 def gravarRotas(origem, destino, doc_transporte, data_hora_chegada, valor_carga, motorista_rota, tipo_veiculo,situacao):

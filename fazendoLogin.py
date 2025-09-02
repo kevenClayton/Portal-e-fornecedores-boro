@@ -1,19 +1,9 @@
-from selenium.webdriver.chrome.options import Options
-import requests
-import html5lib
-import pegarValorObservacao
-import validarLetraProduto
-import fazendoLogin
-import pandas as pd
-from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver import Keys
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.select import Select
-from urllib.parse import urlparse
-from urllib.parse import parse_qs
 import time
+from urllib.parse import urlparse
+import ListandoRotas2
+from selenium.webdriver.chrome.options import Options
+
+
 def fazendoLogin(driver,login):
     url = 'https://portal.e-fornecedores.ind.br/'
 
@@ -38,8 +28,8 @@ def fazendoLogin(driver,login):
     #clica em logar
     driver.find_element("id","ctlLoadedControl_btnOK").click()
 
-def verificandoSeTaLogado(driver):
-    time.sleep(2)
+def verificandoSeTaLogado(driver):    
+    time.sleep(1)
     driver.refresh()
     logado = False
 

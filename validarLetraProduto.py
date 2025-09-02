@@ -1,16 +1,7 @@
-from selenium.webdriver.chrome.options import Options
-import requests
-import html5lib
-import pegarValorObservacao
-import validarLetraProduto
-import fazendoLogin
 import pandas as pd
 from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver import Keys
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.select import Select
+import time
+
 
 def verificarTemLetraB(driver, numeroDocumento):
     def urlprodduto(doc):
@@ -33,7 +24,7 @@ def verificarTemLetraB(driver, numeroDocumento):
         if produto.split()[0][0] == 'B':
             contemLetraB = True
 
-
+    time.sleep(2)
     driver.back()
     return contemLetraB
 
@@ -95,7 +86,7 @@ def pegarObservacoesRota(driver, numeroDocumento):
     else:
         print('pre tag não encontrada')
 
-
+    time.sleep(2)
     driver.back()
 
     return observacao

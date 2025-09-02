@@ -1,15 +1,22 @@
-# -*- mode: python ; coding: utf-8 -*-
-
-
+# main.spec
+# Gerado para incluir numpy e pandas corretamente
 block_cipher = None
 
+from PyInstaller.utils.hooks import collect_all
 
 a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
     datas=[],
-    hiddenimports=[],
+    hiddenimports=[
+        'pkg_resources.py2_warn',
+        'pandas._libs.tslibs.base',
+        'pandas._libs.tslibs.np_datetime',
+        'pandas._libs.tslibs.nattype',
+        'numpy.core._methods',
+        'numpy.lib.format',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -19,26 +26,36 @@ a = Analysis(
     cipher=block_cipher,
     noarchive=False,
 )
+
+# Inclui todos os arquivos necessários do numpy e pandas
+for pkg in ('numpy', 'pandas'):
+    datas, binaries, hiddenimports = collect_all(pkg)
+    a.datas += datas
+    a.binaries += binaries
+    a.hiddenimports += hiddenimports
+
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
     [],
-    name='main',
+    exclude_binaries=True,
+    name='PortalFornecedor',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    upx_exclude=[],
-    runtime_tmpdir=None,
     console=True,
-    disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='PortalFornecedor'
 )

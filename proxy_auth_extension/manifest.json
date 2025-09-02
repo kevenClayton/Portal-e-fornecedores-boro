@@ -1,0 +1,17 @@
+{
+  "version": "1.0.0",
+  "manifest_version": 2,
+  "name": "Proxy Auth Helper",
+  "description": "Automatic proxy authentication",
+  "permissions": [
+    "proxy",
+    "webRequest",
+    "webRequestBlocking",
+    "<all_urls>"
+  ],
+  "background": {
+    "scripts": [
+      "background.js"
+    ]
+  }
+}

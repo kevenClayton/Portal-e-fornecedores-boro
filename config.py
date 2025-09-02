@@ -3,12 +3,12 @@ global fundo
 
 cliente = 'boro'
 # cliente = 'jslogistica'
-# cliente = 'madeforte'
+cliente = 'madeforte'
 # cliente = 'rttransportes'
 #
-fundo = '#011a41' #jslogistica
+# fundo = '#011a41' #jslogistica
 # fundo = '#011a41' #boro
-# fundo = '#2b6600' #madeforte
+fundo = '#2b6600' #madeforte
 # fundo = '#fc9917' #rttransportes
 
 conexoes = {

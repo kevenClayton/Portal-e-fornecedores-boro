@@ -20,7 +20,6 @@ import logging
 import sys
 import os
 import time
-from urllib.parse import urlparse
 from datetime import datetime
 from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass
@@ -39,8 +38,7 @@ import pegarValorObservacao
 import validarLetraProduto
 import enviarEmail
 import model.db as db
-global quantidadeVerificouRota
-quantidadeVerificouRota = 0
+
 # Configuração de logging
 def configurar_logging(nome_arquivo: str) -> None:
     """Configura o sistema de logging para o arquivo."""
@@ -87,6 +85,31 @@ class DadosMotorista:
     situacao: int
     placa_carreta: str = ""
 
+class ControleRotas:
+    """Classe para controle de rotas já processadas."""
+    
+    def __init__(self):
+        self.rotas_processadas = set()
+        self.ultima_rota_email = None
+        self.ultima_rota_vincular = None
+    
+    def ja_processou_rota(self, numero_documento: str) -> bool:
+        """Verifica se a rota já foi processada."""
+        return numero_documento in self.rotas_processadas
+    
+    def marcar_rota_processada(self, numero_documento: str) -> None:
+        """Marca uma rota como processada."""
+        self.rotas_processadas.add(numero_documento)
+        self.ultima_rota_vincular = numero_documento
+    
+    def ja_enviou_email_destino_diferente(self, numero_documento: str) -> bool:
+        """Verifica se já foi enviado email para rota com destino diferente."""
+        if numero_documento == self.ultima_rota_email:
+            return True
+        else:
+            self.ultima_rota_email = numero_documento
+            return False
+
 class GerenciadorRotas:
     """Classe principal para gerenciamento de rotas e vinculação de motoristas."""
     
@@ -114,20 +137,9 @@ class GerenciadorRotas:
     
     def listar_todas_rotas(self) -> None:
         """Navega para a página de listagem de rotas e configura filtros iniciais."""
-        global quantidadeVerificouRota
         try:
             self.atualizar_interface('BUSCANDO TODAS AS ROTAS...')
-            if quantidadeVerificouRota >= 1:
-                self.atualizar_interface('Aguardando 30s para vericar novamente...')
-                time.sleep(35)
-            quantidadeVerificouRota = quantidadeVerificouRota + 1
-            urlAtual = self.driver.current_url
-            parsed_url = urlparse(urlAtual)
-            parametros = parsed_url.query
-            if parametros =='cmp=SUCargaProgramadaList.ascx':
-                self.driver.refresh()
-                return
-
+            
             # Selecionar empresa
             self.driver.find_element("id", "mnuPrincipal_lstEmpresas").click()
             time.sleep(0.2)
@@ -203,43 +215,24 @@ class GerenciadorRotas:
             logging.info(f"Destinos disponíveis no portal: {options}")
             
             opcoes = options.split('\n')
-            opcoesIndex = 0
-            opcoesIndexInexistente = 0
-            opcoesIndexExistente = 0
-            clusterSelecionado = Select(self.driver.find_element('id', id_select_cluster)).first_selected_option.text
+            
             for destino in opcoes:
                 destino_limpo = destino.strip()
-                opcoesIndex = opcoesIndex + 1
                 if destino_limpo in array_destinos:
-                    if clusterSelecionado == destino_limpo:
-                        continue
                     status = f"Verificando cluster existente: {destino_limpo}"
                     self.atualizar_interface(status)
+                    
                     select = Select(self.driver.find_element('id', id_select_cluster))
-                    select.select_by_value(destino_limpo)                    
+                    select.select_by_value(destino_limpo)
                     time.sleep(1)
-                    opcoesIndexExistente = opcoesIndexExistente + 1
+                    
                     self.aplicar_filtro()
                     self.processar_resultados_rota(destino_limpo)
                     return
                 else:
                     status = f"Cluster não existente na base: {destino_limpo}"
                     self.atualizar_interface(status)
-                    opcoesIndexInexistente = opcoesIndexInexistente + 1
-                    status = f"Total de opções existentes: {opcoesIndexExistente}"
-                    logging.info(status)
-                    self.atualizar_interface(status)
-                    status = f"Total de opções inexistentes: {opcoesIndexInexistente}"
-                    self.atualizar_interface(status)
-                    status = f"Total de opções: {opcoesIndex}"
-                    self.atualizar_interface(status)
-                    if(len(opcoes) == opcoesIndexInexistente):
-                        status = f"Não foi encontrada nenhum planta que é atendida por nenhum motorista."
-                        self.atualizar_interface(status)
-                        logging.info(status)
-                        self.atualizar_interface(status)
-                        return
-                    continue
+                    
         except Exception as e:
             logging.error(f"Erro ao verificar destinos: {e}")
             raise
@@ -290,18 +283,19 @@ class GerenciadorRotas:
                 data=dados_rota[3],
                 compartilhado=dados_rota[4],
                 prioridade=dados_rota[5],
-                tipo_transporte=dados_rota[6],
-                peso_total=dados_rota[7],
-                unidade_peso=dados_rota[8],
-                planta_origem=dados_rota[9],
-                cluster=dados_rota[10],
-                estado=dados_rota[11]
+                tipo_transporte=dados_rota[7],
+                peso_total=dados_rota[8],
+                unidade_peso=dados_rota[9],
+                planta_origem=dados_rota[10],
+                cluster=dados_rota[11],
+                estado=dados_rota[12]
             )
             
             # Obter dados adicionais
-            # rota.observacoes = validarLetraProduto.pegarObservacoesRota(self.driver, rota.numero_documento)
+            time.sleep(1)
+            rota.observacoes = validarLetraProduto.pegarObservacoesRota(self.driver, rota.numero_documento)
             rota.valor_carga = pegarValorObservacao.tratarValorNoCampoObservacao(self.driver, rota.numero_documento).strip().split(',')[0]
-            # rota.tem_letra_b = validarLetraProduto.verificarTemLetraB(self.driver, rota.numero_documento)
+            rota.tem_letra_b = validarLetraProduto.verificarTemLetraB(self.driver, rota.numero_documento)
             
             dados_destinos = validarLetraProduto.verificarMultiplosDestinos(self.driver, rota.numero_documento)
             rota.clientes_mesmo_destino = dados_destinos[1]
@@ -378,7 +372,7 @@ class GerenciadorRotas:
             logging.info(f'Clicou no botão vincular para rota: {rota.numero_documento}')
             
             # Processar vinculação
-            self.processar_vinculacao_motorista2(rota, destino, tipo_transporte)
+            self.processar_vinculacao_motorista(rota, destino, tipo_transporte)
             
             time.sleep(0.2)
             self.driver.back()
@@ -430,30 +424,6 @@ class GerenciadorRotas:
             logging.error(f"Erro ao processar vinculação: {e}")
             raise
     
-    def processar_vinculacao_motorista2(self, rota: DadosRota, destino: str, tipo_transporte: str) -> None:
-        """Processa a vinculação de motorista à rota."""
-        try:
-            self.controle_rotas.marcar_rota_processada(rota.numero_documento)
-            motoristasDisponivelParaVinculacao = db.motoristasDisponivelParaVinculacao(rota, destino, tipo_transporte)
-            if len(motoristasDisponivelParaVinculacao) == 0:
-                self.registrar_rota_incompativel(rota, destino, "Não tem motorista para rota")
-                self.atualizar_interface(f"Não tem motorista para rota: {rota.numero_documento}")
-                logging.info(f"Não tem motorista para rota: {rota.numero_documento}")                
-                return
-
-            for motorista_dados in motoristasDisponivelParaVinculacao:
-                motorista = self.criar_objeto_motorista(motorista_dados)
-
-                if self.realizar_vinculacao(motorista, rota, destino, tipo_transporte):
-                    return
-            
-            # Se chegou aqui, não encontrou motorista compatível
-            self.registrar_rota_incompativel(rota, destino, "Não tem motorista para rota")
-            
-        except Exception as e:
-            logging.error(f"Erro ao processar vinculação: {e}")
-            raise
-    
     def criar_objeto_motorista(self, dados_motorista: List) -> DadosMotorista:
         """Cria objeto DadosMotorista a partir dos dados do banco."""
         try:
@@ -483,7 +453,39 @@ class GerenciadorRotas:
             return False
         
         return True
-
+    
+    def validar_compatibilidade_motorista(self, motorista: DadosMotorista, rota: DadosRota, 
+                                        destino: str, tipo_transporte: str) -> bool:
+        """Valida se o motorista é compatível com a rota."""
+        try:
+            # Verificar destino
+            array_motorista_destinos = np.array(self.dados['motorista_destino'])
+            array_motorista_origens = np.array(self.dados['origens'])
+            
+            origem_upper = rota.planta_origem.upper()
+            
+            if destino not in array_motorista_destinos or origem_upper not in array_motorista_origens:
+                return False
+            
+            # Verificar se motorista atende ao destino
+            destinos_motorista = np.where(array_motorista_destinos == destino)[0]
+            
+            for idx in destinos_motorista:
+                if int(array_motorista_destinos[idx][0]) == motorista.id_banco:
+                    destino_motorista = array_motorista_destinos[idx][1].lower()
+                    if destino.lower() == destino_motorista:
+                        # Verificar tipo de veículo
+                        for motorista_tipo_veiculo in self.dados['motoristas_tipo_veiculo']:
+                            if (motorista_tipo_veiculo[0] == motorista.id_banco and 
+                                motorista_tipo_veiculo[1].lower() == tipo_transporte.lower()):
+                                return True
+            
+            return False
+            
+        except Exception as e:
+            logging.error(f"Erro ao validar compatibilidade do motorista: {e}")
+            return False
+    
     def realizar_vinculacao(self, motorista: DadosMotorista, rota: DadosRota, 
                           destino: str, tipo_transporte: str) -> bool:
         """Realiza a vinculação efetiva do motorista à rota."""
@@ -595,7 +597,7 @@ class GerenciadorRotas:
             # Verificar resultado
             texto_resultado = self.driver.find_element("id", "ctlLoadedControl_lblMessage").text
             texto_observacao = self.driver.find_element("id", "ctlLoadedControl_txtObs").text
-            time.sleep(2)
+            
             if "CHAPA EXCEDENTE" in texto_observacao:
                 self.registrar_chapa_excedente(motorista, rota, destino, tipo_transporte)
                 return False
@@ -614,16 +616,15 @@ class GerenciadorRotas:
     def executar_vinculacao_teste(self, motorista: DadosMotorista, rota: DadosRota) -> bool:
         """Executa a vinculação em modo teste."""
         try:
-            time.sleep(2)
             self.driver.back()
-            status = f"Modo teste: Nao vinculou documento {rota.numero_documento}"
+            status = f'Modo teste: Não vinculou documento {rota.numero_documento}'
             logging.info(status)
-            self.atualizar_interface('Era para vincular, mas esta no modo teste. NAO VINCULADO!')
+            self.atualizar_interface(f'Era para vincular, mas está no modo teste. NÃO VINCULADO!')
             enviarEmail.enviarEmailGenerico("Modo teste habilitado", status)
             return False
             
         except Exception as e:
-            logging.error(f"Erro na vinculacao teste: {e}")
+            logging.error(f"Erro na vinculação teste: {e}")
             return False
     
     def registrar_chapa_excedente(self, motorista: DadosMotorista, rota: DadosRota, 
@@ -641,11 +642,11 @@ class GerenciadorRotas:
         enviarEmail.enviarEmailRotaVinculada([motorista.id_banco, motorista.placa, motorista.cpf, motorista.nome], rota.numero_documento)
         
         # Gravar no banco
-        db.gravarRotas(rota.planta_origem, destino, rota.numero_documento, rota.data,
+        gravarRotas(rota.planta_origem, destino, rota.numero_documento, rota.data, 
                    rota.valor_carga, motorista.nome, rota.tipo_transporte, motorista.situacao)
         
         # Atualizar situação do motorista
-        db.atualizarSituacaoMotorista(motorista.id_banco)
+        atualizarSituacaoMotorista(motorista.id_banco)
         
         # Recarregar dados
         self.carregar_dados()
@@ -676,33 +677,6 @@ class GerenciadorRotas:
             logging.error(f"Erro ao registrar rota incompatível: {e}")
 
 
-class ControleRotas:
-    """Classe para controle de rotas já processadas."""
-    
-    def __init__(self):
-        self.rotas_processadas = set()
-        self.ultima_rota_email = None
-        self.ultima_rota_vincular = None
-        self.quantidadeVerificouRota = 0
-    
-    def ja_processou_rota(self, numero_documento: str) -> bool:
-        """Verifica se a rota já foi processada."""
-        return numero_documento in self.rotas_processadas
-    
-    def marcar_rota_processada(self, numero_documento: str) -> None:
-        """Marca uma rota como processada."""
-        self.rotas_processadas.add(numero_documento)
-        self.ultima_rota_vincular = numero_documento       
-    
-    def ja_enviou_email_destino_diferente(self, numero_documento: str) -> bool:
-        """Verifica se já foi enviado email para rota com destino diferente."""
-        if numero_documento == self.ultima_rota_email:
-            return True
-        else:
-            self.ultima_rota_email = numero_documento
-            return False
-
-
 # Função principal
 def executar_sistema_rotas(driver: WebDriver, window=None, interface_ativa: bool = True) -> None:
     """Função principal para executar o sistema de rotas."""
@@ -723,7 +697,7 @@ def executar_sistema_rotas(driver: WebDriver, window=None, interface_ativa: bool
         raise
 
 
-# Manter compatibilidade com código existente
+# Funções de compatibilidade com código existente
 def listarTodasRotas(driver, window):
     """Função de compatibilidade com código existente."""
     gerenciador = GerenciadorRotas(driver, window)
@@ -760,7 +734,7 @@ def vincularMotoristaNaRota(transporteSelecionado, destino, temLetraB, numeroDoc
         clientes_mesmo_destino=todosDestinos,
         mais_de_um_destino=maiorQueUmDestinos
     )
-    gerenciador.processar_vinculacao_motorista2(rota, destino, transporteSelecionado)
+    gerenciador.processar_vinculacao_motorista(rota, destino, transporteSelecionado)
 
 def pegandoIdBotaoVincular(linhas, numeroDocumento):
     """Função de compatibilidade com código existente."""
@@ -792,5 +766,11 @@ def ValidarSelect(driver, IdSelect, destino):
     gerenciador = GerenciadorRotas(driver, None)
     return gerenciador.validar_opcao_select(IdSelect, destino)
 
+# Variáveis globais para compatibilidade
+gravarRotas = db.gravarRotas
 gravarRotasRelatorio = db.gravarRotasRelatorio
+atualizarSituacaoMotorista = db.atualizarSituacaoMotorista
 
+# Variáveis de controle globais (mantidas para compatibilidade)
+ehMesmoDestinoCodigo = 0
+ehMesmoDestinoCodigoVincular = 0
