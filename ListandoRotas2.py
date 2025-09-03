@@ -97,6 +97,15 @@ class GerenciadorRotas:
         self.controle_rotas = ControleRotas()
         self.carregar_dados()
         
+        # Limpar rotas antigas automaticamente (mais de 7 dias)
+        self.controle_rotas.limpar_rotas_antigas(7)
+        
+        # Mostrar estatísticas das rotas processadas
+        stats = self.controle_rotas.obter_estatisticas()
+        logging.info(f"Controle de rotas inicializado: {stats['total_rotas']} rotas já processadas")
+        if stats['ultima_rota']:
+            logging.info(f"Última rota processada: {stats['ultima_rota']}")
+        
     def carregar_dados(self) -> None:
         """Carrega dados do banco de dados."""
         try:
@@ -112,14 +121,33 @@ class GerenciadorRotas:
             self.window['-OUTPUT-'].update(mensagem)
         print(mensagem)
     
-    def listar_todas_rotas(self) -> None:
+    def mostrar_status_rotas_processadas(self) -> None:
+        """Mostra o status das rotas já processadas na interface."""
+        try:
+            stats = self.controle_rotas.obter_estatisticas()
+            proxima_limpeza = self.controle_rotas.obter_proxima_limpeza()
+            
+            status_msg = f"Rotas processadas: {stats['total_rotas']}"
+            if stats['ultima_rota']:
+                status_msg += f" | Última: {stats['ultima_rota']}"
+            status_msg += f" | Próxima limpeza: {proxima_limpeza}"
+            
+            self.atualizar_interface(status_msg)
+            logging.info(status_msg)
+        except Exception as e:
+            logging.error(f"Erro ao mostrar status das rotas: {e}")
+    
+    def listar_todas_rotas(self, tempo_espera: int = 30) -> None:
         """Navega para a página de listagem de rotas e configura filtros iniciais."""
         global quantidadeVerificouRota
         try:
+            # Mostrar status das rotas já processadas
+            self.mostrar_status_rotas_processadas()
+            
             self.atualizar_interface('BUSCANDO TODAS AS ROTAS...')
             if quantidadeVerificouRota >= 1:
-                self.atualizar_interface('Aguardando 30s para vericar novamente...')
-                time.sleep(35)
+                self.atualizar_interface(f'Aguardando {tempo_espera}s para verificar novamente...')
+                time.sleep(tempo_espera)
             quantidadeVerificouRota = quantidadeVerificouRota + 1
             urlAtual = self.driver.current_url
             parsed_url = urlparse(urlAtual)
@@ -270,12 +298,12 @@ class GerenciadorRotas:
             dados_tabela = tabela_completa.to_dict('split')['data']
             
             for rota_dados in dados_tabela:
-                rota = self.criar_objeto_rota(rota_dados)
-                
-                if self.controle_rotas.ja_processou_rota(rota.numero_documento):
-                    logging.info(f"Rota já processada: {rota.numero_documento}")
+
+                if self.controle_rotas.ja_processou_rota(str(rota_dados[0])):
+
                     continue
-                
+
+                rota = self.criar_objeto_rota(rota_dados)
                 self.processar_rota_individual(rota, destino)
                 
         except Exception as e:
@@ -286,26 +314,44 @@ class GerenciadorRotas:
         """Cria objeto DadosRota a partir dos dados da tabela."""
         try:
             rota = DadosRota(
-                numero_documento=dados_rota[0],
-                data=dados_rota[3],
-                compartilhado=dados_rota[4],
-                prioridade=dados_rota[5],
-                tipo_transporte=dados_rota[6],
-                peso_total=dados_rota[7],
-                unidade_peso=dados_rota[8],
-                planta_origem=dados_rota[9],
-                cluster=dados_rota[10],
-                estado=dados_rota[11]
+                numero_documento=self._tratar_valor_nan(dados_rota[0]),
+                data=self._tratar_valor_nan(dados_rota[3]),
+                compartilhado=self._tratar_valor_nan(dados_rota[4]),
+                prioridade=self._tratar_valor_nan(dados_rota[5]),
+                tipo_transporte=self._tratar_valor_nan(dados_rota[6]),
+                peso_total=self._tratar_valor_nan(dados_rota[7]),
+                unidade_peso=self._tratar_valor_nan(dados_rota[8]),
+                planta_origem=self._tratar_valor_nan(dados_rota[9]),
+                cluster=self._tratar_valor_nan(dados_rota[10]),
+                estado=self._tratar_valor_nan(dados_rota[11])
             )
             
             # Obter dados adicionais
             # rota.observacoes = validarLetraProduto.pegarObservacoesRota(self.driver, rota.numero_documento)
-            rota.valor_carga = pegarValorObservacao.tratarValorNoCampoObservacao(self.driver, rota.numero_documento).strip().split(',')[0]
+            try:
+                valor_carga_raw = pegarValorObservacao.tratarValorNoCampoObservacao(self.driver, rota.numero_documento)
+                if valor_carga_raw and str(valor_carga_raw).lower() != 'nan':
+                    rota.valor_carga = valor_carga_raw.strip().split(',')[0]
+                else:
+                    rota.valor_carga = ""
+            except Exception as e:
+                logging.warning(f"Erro ao obter valor da carga para documento {rota.numero_documento}: {e}")
+                rota.valor_carga = ""
+            
             # rota.tem_letra_b = validarLetraProduto.verificarTemLetraB(self.driver, rota.numero_documento)
             
-            dados_destinos = validarLetraProduto.verificarMultiplosDestinos(self.driver, rota.numero_documento)
-            rota.clientes_mesmo_destino = dados_destinos[1]
-            rota.mais_de_um_destino = dados_destinos[2] > 1
+            try:
+                dados_destinos = validarLetraProduto.verificarMultiplosDestinos(self.driver, rota.numero_documento)
+                if dados_destinos and len(dados_destinos) > 2:
+                    rota.clientes_mesmo_destino = self._tratar_valor_nan(dados_destinos[1])
+                    rota.mais_de_um_destino = bool(dados_destinos[2]) if dados_destinos[2] is not None else False
+                else:
+                    rota.clientes_mesmo_destino = ""
+                    rota.mais_de_um_destino = False
+            except Exception as e:
+                logging.warning(f"Erro ao verificar múltiplos destinos para documento {rota.numero_documento}: {e}")
+                rota.clientes_mesmo_destino = ""
+                rota.mais_de_um_destino = False
             
             return rota
             
@@ -361,11 +407,32 @@ class GerenciadorRotas:
         try:
             self.atualizar_interface(f'Parâmetros OK: {tipo_transporte} - {rota.valor_carga}')
             
+            # Debug da página antes de processar
+            self._debug_pagina_atual()
+            
+            # Verificar se a página está carregada corretamente
+            if not self._verificar_pagina_carregada('ctlLoadedControl_dgRight', 'Tabela de resultados'):
+                logging.error(f"Página não carregada corretamente para documento: {rota.numero_documento}")
+                self.atualizar_interface(f"ERRO: Página não carregada para documento {rota.numero_documento}")
+                return
+            
             # Obter ID do botão vincular
             html_prod = self.driver.page_source
             soup = BeautifulSoup(html_prod, 'lxml')
             tabela = soup.find('table', id='ctlLoadedControl_dgRight')
+            
+            # Verificar se a tabela foi encontrada
+            if not tabela:
+                logging.error(f"Tabela de resultados não encontrada para documento: {rota.numero_documento}")
+                self.atualizar_interface(f"ERRO: Tabela não encontrada para documento {rota.numero_documento}")
+                return
+            
             linhas = tabela.findChildren('tr')
+            
+            if not linhas:
+                logging.error(f"Nenhuma linha encontrada na tabela para documento: {rota.numero_documento}")
+                self.atualizar_interface(f"ERRO: Nenhuma linha encontrada para documento {rota.numero_documento}")
+                return
             
             id_botao_vincular = self.obter_id_botao_vincular(linhas, rota.numero_documento)
             
@@ -385,22 +452,39 @@ class GerenciadorRotas:
             
         except Exception as e:
             logging.error(f"Erro ao tentar vincular motorista: {e}")
+            # Debug adicional em caso de erro
+            self._debug_pagina_atual()
             raise
     
     def obter_id_botao_vincular(self, linhas, numero_documento: str) -> str:
         """Obtém o ID do botão vincular para um documento específico."""
         try:
+            if not linhas:
+                logging.warning("Lista de linhas vazia ao buscar botão vincular")
+                return ""
+            
             for i, linha in enumerate(linhas):
                 if i == 0:  # Pular cabeçalho
                     continue
+                
+                if not linha:
+                    logging.warning(f"Linha {i} é None ao buscar botão vincular")
+                    continue
                     
-                celulas = linha.findChildren('td')
-                if len(celulas) >= 3:
-                    numero_documento_linha = celulas[0].text.strip()
-                    if str(numero_documento) == numero_documento_linha:
-                        inputs = celulas[2].findChildren('input')
-                        if inputs:
-                            return inputs[0].get('id')
+                try:
+                    celulas = linha.findChildren('td')
+                    if len(celulas) >= 3:
+                        numero_documento_linha = celulas[0].text.strip()
+                        if str(numero_documento) == numero_documento_linha:
+                            inputs = celulas[2].findChildren('input')
+                            if inputs:
+                                return inputs[0].get('id')
+                except AttributeError as e:
+                    logging.warning(f"Erro ao processar linha {i}: {e}")
+                    continue
+                except Exception as e:
+                    logging.warning(f"Erro inesperado ao processar linha {i}: {e}")
+                    continue
             
             return ""
             
@@ -667,32 +751,141 @@ class GerenciadorRotas:
     def registrar_rota_incompativel(self, rota: DadosRota, destino: str, motivo: str) -> None:
         """Registra rota incompatível no relatório."""
         try:
+            # Tratar valores NaN antes de enviar para o banco
+            planta_origem = self._tratar_valor_nan(rota.planta_origem)
+            destino_limpo = self._tratar_valor_nan(destino)
+            numero_documento = self._tratar_valor_nan(rota.numero_documento)
+            data = self._tratar_valor_nan(rota.data)
+            valor_carga = self._tratar_valor_nan(rota.valor_carga)
+            tipo_transporte = self._tratar_valor_nan(rota.tipo_transporte)
+            peso_total = self._tratar_valor_nan(rota.peso_total)
+            observacoes = self._tratar_valor_nan(rota.observacoes)
+            prioridade = self._tratar_valor_nan(rota.prioridade)
+            clientes = self._tratar_valor_nan(rota.clientes_mesmo_destino)
+            mais_de_um_destino = self._tratar_valor_nan(rota.mais_de_um_destino)
+            motivo_limpo = self._tratar_valor_nan(motivo)
+            
             gravarRotasRelatorio(
-                rota.planta_origem, destino, rota.numero_documento, rota.data,
-                rota.valor_carga, rota.tipo_transporte, rota.peso_total, rota.observacoes,
-                rota.prioridade, rota.clientes_mesmo_destino, rota.mais_de_um_destino, motivo
+                planta_origem, destino_limpo, numero_documento, data,
+                valor_carga, tipo_transporte, peso_total, observacoes,
+                prioridade, clientes, mais_de_um_destino, motivo_limpo
             )
         except Exception as e:
             logging.error(f"Erro ao registrar rota incompatível: {e}")
+    
+    def _tratar_valor_nan(self, valor) -> str:
+        """Trata valores NaN convertendo para string vazia."""
+        if valor is None:
+            return ""
+        
+        # Converter para string primeiro
+        valor_str = str(valor)
+        
+        # Verificar se é NaN (pandas) ou 'nan' (string)
+        if (valor_str.lower() == 'nan' or 
+            valor_str.lower() == 'none' or 
+            valor_str.lower() == 'null' or
+            valor_str.strip() == ''):
+            return ""
+        
+        return valor_str.strip()
+    
+    def _verificar_pagina_carregada(self, elemento_id: str, descricao: str = "") -> bool:
+        """Verifica se a página está carregada corretamente verificando um elemento específico."""
+        try:
+            # Aguardar um pouco para a página carregar
+            time.sleep(1)
+            
+            # Verificar se o elemento existe
+            elemento = self.driver.find_element("id", elemento_id)
+            if elemento:
+                logging.info(f"Elemento {elemento_id} ({descricao}) encontrado - Página carregada")
+                return True
+            else:
+                logging.warning(f"Elemento {elemento_id} ({descricao}) não encontrado")
+                return False
+                
+        except Exception as e:
+            logging.error(f"Erro ao verificar elemento {elemento_id} ({descricao}): {e}")
+            return False
+    
+    def _debug_pagina_atual(self) -> None:
+        """Função de debug para verificar o estado atual da página."""
+        try:
+            current_url = self.driver.current_url
+            page_title = self.driver.title
+            page_source_length = len(self.driver.page_source)
+            
+            logging.info(f"DEBUG - URL atual: {current_url}")
+            logging.info(f"DEBUG - Título da página: {page_title}")
+            logging.info(f"DEBUG - Tamanho do HTML: {page_source_length} caracteres")
+            
+            # Verificar elementos importantes
+            elementos_importantes = [
+                ('ctlLoadedControl_dgRight', 'Tabela de resultados'),
+                ('mnuPrincipal_lstEmpresas', 'Lista de empresas'),
+                ('ctlLoadedControl_ddlCluster', 'Select de cluster')
+            ]
+            
+            for elemento_id, descricao in elementos_importantes:
+                self._verificar_pagina_carregada(elemento_id, descricao)
+                
+        except Exception as e:
+            logging.error(f"Erro no debug da página: {e}")
 
 
 class ControleRotas:
     """Classe para controle de rotas já processadas."""
     
     def __init__(self):
-        self.rotas_processadas = set()
+        self.arquivo_rotas_processadas = 'rotas_processadas.txt'
+        self.rotas_processadas = self._carregar_rotas_processadas()
         self.ultima_rota_email = None
         self.ultima_rota_vincular = None
         self.quantidadeVerificouRota = 0
+        
+        # Controle de limpeza automática
+        self.ultima_limpeza = datetime.now()
+        self.intervalo_limpeza_minutos = 5  # Limpar a cada 5 minutos
     
     def ja_processou_rota(self, numero_documento: str) -> bool:
         """Verifica se a rota já foi processada."""
         return numero_documento in self.rotas_processadas
     
+    def _carregar_rotas_processadas(self) -> set:
+        """Carrega rotas processadas do arquivo."""
+        try:
+            if os.path.exists(self.arquivo_rotas_processadas):
+                with open(self.arquivo_rotas_processadas, 'r', encoding='utf-8') as f:
+                    rotas = set(line.strip() for line in f if line.strip())
+                logging.info(f"Carregadas {len(rotas)} rotas processadas do arquivo")
+                return rotas
+            else:
+                logging.info("Arquivo de rotas processadas não encontrado, iniciando com set vazio")
+                return set()
+        except Exception as e:
+            logging.error(f"Erro ao carregar rotas processadas: {e}")
+            return set()
+    
+    def _salvar_rotas_processadas(self) -> None:
+        """Salva rotas processadas no arquivo."""
+        try:
+            with open(self.arquivo_rotas_processadas, 'w', encoding='utf-8') as f:
+                for rota in sorted(self.rotas_processadas):
+                    f.write(f"{rota}\n")
+            logging.info(f"Salvas {len(self.rotas_processadas)} rotas processadas no arquivo")
+        except Exception as e:
+            logging.error(f"Erro ao salvar rotas processadas: {e}")
+    
     def marcar_rota_processada(self, numero_documento: str) -> None:
         """Marca uma rota como processada."""
         self.rotas_processadas.add(numero_documento)
-        self.ultima_rota_vincular = numero_documento       
+        self.ultima_rota_vincular = numero_documento
+        # Salvar automaticamente após marcar
+        self._salvar_rotas_processadas()
+        
+        # Verificar se é hora de fazer limpeza automática
+        self.verificar_limpeza_automatica()       
     
     def ja_enviou_email_destino_diferente(self, numero_documento: str) -> bool:
         """Verifica se já foi enviado email para rota com destino diferente."""
@@ -701,6 +894,122 @@ class ControleRotas:
         else:
             self.ultima_rota_email = numero_documento
             return False
+    
+    def limpar_rotas_antigas(self, dias_limpeza: int = 7) -> None:
+        """Remove rotas processadas mais antigas que X dias."""
+        try:
+            from datetime import datetime, timedelta
+            data_limite = datetime.now() - timedelta(days=dias_limpeza)
+            
+            rotas_para_remover = set()
+            for rota in self.rotas_processadas:
+                # Tentar extrair data da rota (assumindo formato DD/MM/AAAA)
+                try:
+                    if '/' in rota:
+                        partes = rota.split('/')
+                        if len(partes) == 3:
+                            data_rota = datetime.strptime(f"{partes[2]}-{partes[1]}-{partes[0]}", "%Y-%m-%d")
+                            if data_rota < data_limite:
+                                rotas_para_remover.add(rota)
+                except:
+                    continue
+            
+            if rotas_para_remover:
+                self.rotas_processadas -= rotas_para_remover
+                self._salvar_rotas_processadas()
+                logging.info(f"Removidas {len(rotas_para_remover)} rotas antigas (mais de {dias_limpeza} dias)")
+                
+        except Exception as e:
+            logging.error(f"Erro ao limpar rotas antigas: {e}")
+    
+    def obter_estatisticas(self) -> dict:
+        """Retorna estatísticas das rotas processadas."""
+        return {
+            'total_rotas': len(self.rotas_processadas),
+            'ultima_rota': self.ultima_rota_vincular,
+            'arquivo': self.arquivo_rotas_processadas,
+            'intervalo_limpeza_minutos': self.intervalo_limpeza_minutos,
+            'proxima_limpeza': self.obter_proxima_limpeza(),
+            'ultima_limpeza': self.ultima_limpeza.strftime('%H:%M:%S') if self.ultima_limpeza else 'Nunca'
+        }
+    
+    def limpar_todas_rotas_processadas(self) -> None:
+        """Limpa todas as rotas processadas (útil para resetar o sistema)."""
+        try:
+            self.rotas_processadas.clear()
+            self.ultima_rota_vincular = None
+            self._salvar_rotas_processadas()
+            self.ultima_limpeza = datetime.now()  # Resetar timer de limpeza
+            logging.info("Todas as rotas processadas foram limpas")
+        except Exception as e:
+            logging.error(f"Erro ao limpar rotas processadas: {e}")
+    
+    def forcar_limpeza_agora(self) -> None:
+        """Força a limpeza das rotas processadas imediatamente."""
+        try:
+            logging.info("Forçando limpeza manual das rotas processadas")
+            self.limpar_todas_rotas_processadas()
+            self.ultima_limpeza = datetime.now()
+        except Exception as e:
+            logging.error(f"Erro ao forçar limpeza: {e}")
+    
+    def adicionar_rota_processada_manual(self, numero_documento: str) -> None:
+        """Adiciona manualmente uma rota como processada."""
+        try:
+            self.rotas_processadas.add(numero_documento)
+            self._salvar_rotas_processadas()
+            logging.info(f"Rota {numero_documento} adicionada manualmente como processada")
+        except Exception as e:
+            logging.error(f"Erro ao adicionar rota manualmente: {e}")
+    
+    def verificar_limpeza_automatica(self) -> bool:
+        """Verifica se é hora de fazer limpeza automática das rotas processadas."""
+        try:
+            tempo_atual = datetime.now()
+            tempo_desde_ultima_limpeza = tempo_atual - self.ultima_limpeza
+            minutos_desde_ultima_limpeza = tempo_desde_ultima_limpeza.total_seconds() / 60
+            
+            if minutos_desde_ultima_limpeza >= self.intervalo_limpeza_minutos:
+                logging.info(f"Executando limpeza automática após {minutos_desde_ultima_limpeza:.1f} minutos")
+                self.limpar_todas_rotas_processadas()
+                self.ultima_limpeza = tempo_atual
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logging.error(f"Erro ao verificar limpeza automática: {e}")
+            return False
+    
+    def configurar_intervalo_limpeza(self, minutos: int) -> None:
+        """Configura o intervalo de limpeza automática em minutos."""
+        try:
+            if minutos < 1:
+                minutos = 1
+            self.intervalo_limpeza_minutos = minutos
+            logging.info(f"Intervalo de limpeza automática configurado para {minutos} minutos")
+        except Exception as e:
+            logging.error(f"Erro ao configurar intervalo de limpeza: {e}")
+    
+    def obter_proxima_limpeza(self) -> str:
+        """Retorna quando será a próxima limpeza automática."""
+        try:
+            tempo_atual = datetime.now()
+            tempo_desde_ultima_limpeza = tempo_atual - self.ultima_limpeza
+            minutos_desde_ultima_limpeza = tempo_desde_ultima_limpeza.total_seconds() / 60
+            minutos_restantes = self.intervalo_limpeza_minutos - minutos_desde_ultima_limpeza
+            
+            if minutos_restantes <= 0:
+                return "Agora"
+            elif minutos_restantes < 1:
+                segundos_restantes = int(minutos_restantes * 60)
+                return f"Em {segundos_restantes} segundos"
+            else:
+                return f"Em {minutos_restantes:.1f} minutos"
+                
+        except Exception as e:
+            logging.error(f"Erro ao calcular próxima limpeza: {e}")
+            return "Desconhecido"
 
 
 # Função principal
@@ -724,10 +1033,10 @@ def executar_sistema_rotas(driver: WebDriver, window=None, interface_ativa: bool
 
 
 # Manter compatibilidade com código existente
-def listarTodasRotas(driver, window):
+def listarTodasRotas(driver, window, tempo_espera=30):
     """Função de compatibilidade com código existente."""
     gerenciador = GerenciadorRotas(driver, window)
-    gerenciador.listar_todas_rotas()
+    gerenciador.listar_todas_rotas(tempo_espera)
 
 def selecionarOrigemDestino(driver, window, interface):
     """Função de compatibilidade com código existente."""
@@ -791,6 +1100,41 @@ def ValidarSelect(driver, IdSelect, destino):
     """Função de compatibilidade com código existente."""
     gerenciador = GerenciadorRotas(driver, None)
     return gerenciador.validar_opcao_select(IdSelect, destino)
+
+# Funções de compatibilidade para controle de rotas
+def limparRotasProcessadas():
+    """Função de compatibilidade para limpar todas as rotas processadas."""
+    controle = ControleRotas()
+    controle.limpar_todas_rotas_processadas()
+    return True
+
+def adicionarRotaProcessada(numero_documento):
+    """Função de compatibilidade para adicionar rota como processada."""
+    controle = ControleRotas()
+    controle.adicionar_rota_processada_manual(numero_documento)
+    return True
+
+def obterEstatisticasRotas():
+    """Função de compatibilidade para obter estatísticas das rotas."""
+    controle = ControleRotas()
+    return controle.obter_estatisticas()
+
+def configurarIntervaloLimpeza(minutos: int):
+    """Função de compatibilidade para configurar intervalo de limpeza automática."""
+    controle = ControleRotas()
+    controle.configurar_intervalo_limpeza(minutos)
+    return True
+
+def obterProximaLimpeza():
+    """Função de compatibilidade para obter quando será a próxima limpeza."""
+    controle = ControleRotas()
+    return controle.obter_proxima_limpeza()
+
+def forcarLimpezaAgora():
+    """Função de compatibilidade para forçar limpeza imediata das rotas."""
+    controle = ControleRotas()
+    controle.forcar_limpeza_agora()
+    return True
 
 gravarRotasRelatorio = db.gravarRotasRelatorio
 

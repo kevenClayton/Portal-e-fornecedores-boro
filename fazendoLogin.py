@@ -38,6 +38,9 @@ def verificandoSeTaLogado(driver):
     if(urlAtual == "data:,"):
         return logado
 
+    if(verificarViolacao(driver)):
+        return verificarViolacao(driver)
+
     parsed_url = urlparse(urlAtual)
     parametros = parsed_url.query
     print(logado)
@@ -71,5 +74,13 @@ def verifcaPaginaAcessoSimultaneo(driver):
         logado = True
 
     return logado
+
+def verificarViolacao(driver):
+    if(driver.page_source.__contains__('Violacao')):
+        time.sleep(10)
+        driver.refresh()
+        return True
+    else:
+        return False
 
 

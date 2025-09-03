@@ -12,6 +12,8 @@ import requests
 from config import fundo
 from selenium.webdriver.chrome.service import Service
 import random
+
+from fazendoLogin import verificandoSeTaLogado
 from proxy_auth_handler import auto_handle_proxy_auth
 from proxy_extension import setup_proxy_with_extension, cleanup_proxy_extension
 
@@ -23,7 +25,7 @@ login = dados['login']
 
 # Define the window's contents
 layout = [[sg.Text("Buscar e aceitar rotas no e-Fornecedor")],
-# [sg.Input(key='-INPUT-')],
+[sg.Text("Tempo de espera (segundos):"), sg.Input('30', key='-TEMPO_ESPERA-', size=(10,1))],
 [sg.Text(size=(40,2), key='-OUTPUT-')],
 
 [sg.Button('Buscar e aceitar rotas'), sg.Button('Parar e sair do programa')]]
@@ -37,13 +39,15 @@ interface = False
 
 global valid
 global ambienteDesenvolvimento
+global tempo_espera
 valid = 0
 ambienteDesenvolvimento = False
+tempo_espera = 30
 
 def teste():
     global valid
     global interface
-
+    global tempo_espera
     while True:
         event, values = window.read()
         # See if user wants to quit or window was closed
@@ -60,6 +64,18 @@ def teste():
         elif event == 'Buscar e aceitar rotas':
             valid = 0
             interface = True
+            # Capturar o tempo de espera configurado pelo usuário
+            try:
+                tempo_espera = int(values['-TEMPO_ESPERA-'])
+                if tempo_espera < 1:
+                    tempo_espera = 30
+                    window['-TEMPO_ESPERA-'].update('30')
+                print(f"Tempo de espera configurado: {tempo_espera} segundos")
+            except ValueError:
+                tempo_espera = 30
+                window['-TEMPO_ESPERA-'].update('30')
+                print("Valor inválido para tempo de espera, usando padrão: 30 segundos")
+            
             if ambienteDesenvolvimento == False:
                 now = datetime.now()
                 current_time = now.strftime("%d-%m-%Y, %H:%M:%S")
@@ -148,7 +164,7 @@ while True:
                     #se Tiver parado, pula a execulção da função e para o programa.
                     if interface == True:
 
-                        ListandoRotas2.listarTodasRotas(driver,window)
+                        ListandoRotas2.listarTodasRotas(driver, window, tempo_espera)
                     else:
                         break
                     if interface == True:
@@ -167,7 +183,7 @@ while True:
                     else:
                         break
                     if interface == True:
-                        ListandoRotas2.listarTodasRotas(driver,window)
+                        ListandoRotas2.listarTodasRotas(driver, window, tempo_espera)
                     else:
                         break
 
@@ -182,9 +198,32 @@ while True:
                 if valid == 1:
                     break
         except Exception as e:
-            driver.get('https://portal.e-fornecedores.ind.br/')
-            print('Deu erro aplicação, mas está continuando')
+            import traceback
+            print('=' * 50)
+            print('ERRO CRÍTICO NA APLICAÇÃO:')
             print('ERRO: ' + str(e))
+            print('TIPO DO ERRO: ' + str(type(e).__name__))
+            print('LOCALIZAÇÃO DO ERRO:')
+            traceback.print_exc()
+            print('=' * 50)
+            
+            # Tentar identificar onde está o erro
+            if "'NoneType' object has no attribute 'findChildren'" in str(e):
+                print('ERRO IDENTIFICADO: Tabela HTML não encontrada ou elemento None')
+                print('POSSÍVEIS CAUSAS:')
+                print('- Página não carregou completamente')
+                print('- Elemento da tabela não existe na página')
+                print('- Mudança na estrutura HTML da página')
+                print('- Problema de conexão com o portal')
+            
+            # Tentar verificar se ainda está logado
+            try:
+                fazendoLogin.verificandoSeTaLogado(driver)
+                print('Verificação de login realizada')
+            except Exception as login_error:
+                print(f'Erro ao verificar login: {login_error}')
+            
+            print('Aplicação continuando...')
             pass
 
 
