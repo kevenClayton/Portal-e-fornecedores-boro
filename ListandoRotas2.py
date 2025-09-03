@@ -300,7 +300,7 @@ class GerenciadorRotas:
             for rota_dados in dados_tabela:
 
                 if self.controle_rotas.ja_processou_rota(str(rota_dados[0])):
-
+                    logging.info(f"Rota já processada: {rota_dados[0]}")
                     continue
 
                 rota = self.criar_objeto_rota(rota_dados)
