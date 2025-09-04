@@ -846,7 +846,7 @@ class ControleRotas:
         
         # Controle de limpeza automática
         self.ultima_limpeza = datetime.now()
-        self.intervalo_limpeza_minutos = 5  # Limpar a cada 5 minutos
+        self.intervalo_limpeza_minutos = 1  # Limpar a cada 5 minutos
     
     def ja_processou_rota(self, numero_documento: str) -> bool:
         """Verifica se a rota já foi processada."""

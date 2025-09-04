@@ -3,12 +3,12 @@ global fundo
 
 cliente = 'boro'
 # cliente = 'jslogistica'
-cliente = 'madeforte'
+# cliente = 'madeforte'
 # cliente = 'rttransportes'
 #
 # fundo = '#011a41' #jslogistica
-# fundo = '#011a41' #boro
-fundo = '#2b6600' #madeforte
+fundo = '#011a41' #boro
+# fundo = '#2b6600' #madeforte
 # fundo = '#fc9917' #rttransportes
 
 conexoes = {
@@ -19,7 +19,7 @@ conexoes = {
         'database': 'madeforte',
     },
     'boro': {
-        'host': 'reservaai.cgns57eoufkz.us-east-1.rds.amazonaws.com',
+        'host': 'reservaai-data.cgns57eoufkz.us-east-1.rds.amazonaws.com',
         'user': 'robo',
         'password': 'D41D8CD98F00B204E9800998ECF8427E',
         'database': 'boro',
