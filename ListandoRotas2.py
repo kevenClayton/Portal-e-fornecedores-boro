@@ -149,7 +149,7 @@ class GerenciadorRotas:
             parametros = parsed_url.query
            
             self.atualizar_interface('BUSCANDO TODAS AS ROTAS...')
-            if quantidadeVerificouRota >= 1 and parametros != 'cmp=login.ascx':
+            if quantidadeVerificouRota >= 1 and parametros =='cmp=SUCargaProgramadaList.ascx' or parametros.__contains__("cmp=SUCargaProgramada.ascx"):
                 self.atualizar_interface(f'Aguardando {tempo_espera}s para verificar novamente...')
                 time.sleep(tempo_espera)
             else:
@@ -160,6 +160,7 @@ class GerenciadorRotas:
             parsed_url = urlparse(urlAtual)
             parametros = parsed_url.query
             if parametros =='cmp=SUCargaProgramadaList.ascx' or parametros.__contains__("cmp=SUCargaProgramada.ascx"):
+                self.atualizar_interface(f'Já está na tela correta, e já verificou novos cluester, só recarregar pra conferir')
                 self.driver.refresh()
                 return
 

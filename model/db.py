@@ -296,7 +296,7 @@ def atualizarSituacaoMotorista(idMotorista):
 		)
 	# SETANDO VARIAVER PRINCIPAL DA BIBLIOTECA.
 	cursor = db_connection.cursor()
-	print("Database connection!")
+	print("Conectando no banco")
 	gravar = " UPDATE `motoristas` set `situacao` = 0, ordem_motorista = 10000 where id = "+str(idMotorista)+""
 
 	cursor.execute(gravar)

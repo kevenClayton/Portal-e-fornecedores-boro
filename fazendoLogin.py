@@ -48,6 +48,9 @@ def verificandoSeTaLogado(driver):
     if parametros =='cmp=Error.ascx':
         driver.get('https://portal.e-fornecedores.ind.br/')
 
+    if parametros == 'cmp=login.ascx':
+        logado = False
+
     if(parametros != ""):
         logado = True
 
