@@ -24,7 +24,7 @@ from urllib.parse import urlparse
 from datetime import datetime
 from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass
-
+import fazendoLogin
 import pandas as pd
 import numpy as np
 import unidecode
@@ -143,16 +143,23 @@ class GerenciadorRotas:
         try:
             # Mostrar status das rotas já processadas
             self.mostrar_status_rotas_processadas()
-            
+            urlAtual = self.driver.current_url
+
+            parsed_url = urlparse(urlAtual)
+            parametros = parsed_url.query
+           
             self.atualizar_interface('BUSCANDO TODAS AS ROTAS...')
-            if quantidadeVerificouRota >= 1:
+            if quantidadeVerificouRota >= 1 and parametros != 'cmp=login.ascx':
                 self.atualizar_interface(f'Aguardando {tempo_espera}s para verificar novamente...')
                 time.sleep(tempo_espera)
+            else:
+                print("Login novamente ou não verificou todas cargas")
+
             quantidadeVerificouRota = quantidadeVerificouRota + 1
             urlAtual = self.driver.current_url
             parsed_url = urlparse(urlAtual)
             parametros = parsed_url.query
-            if parametros =='cmp=SUCargaProgramadaList.ascx':
+            if parametros =='cmp=SUCargaProgramadaList.ascx' or parametros.__contains__("cmp=SUCargaProgramada.ascx"):
                 self.driver.refresh()
                 return
 
@@ -179,6 +186,14 @@ class GerenciadorRotas:
         except Exception as e:
             logging.error(f"Erro ao listar rotas: {e}")
             self.atualizar_interface(f"ERRO: {e}")
+            urlAtual = self.driver.current_url
+            parsed_url = urlparse(urlAtual)
+            parametros = parsed_url.query
+            if parametros == 'cmp=login.ascx':
+                print("Caiu no loging, refazendo login")
+                fazendoLogin.fazendoLogin(self.driver, self.dados['login'])
+            else:
+                print("Erro ao listar rotas")
             raise
     
     def validar_opcao_select(self, id_select: str, valor_desejado: str) -> bool:
