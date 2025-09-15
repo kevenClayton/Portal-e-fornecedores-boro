@@ -16,7 +16,6 @@ def tratarValorNoCampoObservacao(driver, numeroDocumento):
     htmlsplit = str(htmlObs).split('<br/>')[0]
     valorCarga = htmlsplit.replace('<pre id="_ctl8_txtObs">Valor da carga:', '')
     valorCarga = valorCarga.replace('R$', '')
-
-    time.sleep(2)
+  
     driver.back()
     return valorCarga

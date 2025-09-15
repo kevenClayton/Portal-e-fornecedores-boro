@@ -23,8 +23,7 @@ def verificarTemLetraB(driver, numeroDocumento):
         #print(produto.split()[0][0])
         if produto.split()[0][0] == 'B':
             contemLetraB = True
-
-    time.sleep(2)
+   
     driver.back()
     return contemLetraB
 
@@ -85,8 +84,7 @@ def pegarObservacoesRota(driver, numeroDocumento):
         print(observacao)
     else:
         print('pre tag não encontrada')
-
-    time.sleep(2)
+    
     driver.back()
 
     return observacao
