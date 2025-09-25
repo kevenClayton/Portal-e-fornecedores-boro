@@ -1,9 +1,9 @@
 global cliente
 global fundo
 
-cliente = 'boro'
+# cliente = 'boro'
 # cliente = 'jslogistica'
-# cliente = 'madeforte'
+cliente = 'madeforte'
 # cliente = 'rttransportes'
 #
 # fundo = '#011a41' #jslogistica

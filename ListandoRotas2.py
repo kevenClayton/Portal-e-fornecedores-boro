@@ -265,7 +265,7 @@ class GerenciadorRotas:
                     opcoesIndexExistente = opcoesIndexExistente + 1
                     self.aplicar_filtro()
                     self.processar_resultados_rota(destino_limpo)
-                    return
+                    continue
                 else:
                     status = f"Cluster não existente na base: {destino_limpo}"
                     self.atualizar_interface(status)

@@ -4,8 +4,8 @@
         rules: {
             singleProxy: {
                 scheme: "http",
-                host: "216.10.27.159",
-                port: 6837
+                host: "107.172.163.27",
+                port: 6543
             }
         }
     };
