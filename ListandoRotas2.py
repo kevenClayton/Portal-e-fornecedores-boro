@@ -252,10 +252,18 @@ class GerenciadorRotas:
             opcoesIndexExistente = 0
             clusterSelecionado = Select(self.driver.find_element('id', id_select_cluster)).first_selected_option.text
             for destino in opcoes:
+                primeiraOpcao = opcoes[0]
                 destino_limpo = destino.strip()
                 opcoesIndex = opcoesIndex + 1
                 if destino_limpo in array_destinos:
                     if clusterSelecionado == destino_limpo:
+                        # Selecionar o proximo destino
+                        self.atualizar_interface("Cluster ja foi verificado, verificando os proximos")
+                        select = Select(self.driver.find_element('id', id_select_cluster))                    
+                        select.select_by_value(primeiraOpcao.strip())
+                        clusterSelecionado = Select(self.driver.find_element('id', id_select_cluster)).first_selected_option.text
+                        time.sleep(2)
+                        self.aplicar_filtro()
                         continue
                     status = f"Verificando cluster existente: {destino_limpo}"
                     self.atualizar_interface(status)
@@ -316,7 +324,9 @@ class GerenciadorRotas:
             for rota_dados in dados_tabela:
 
                 if self.controle_rotas.ja_processou_rota(str(rota_dados[0])):
+                    self.atualizar_interface(f"Já entrou nessa rota, não vai entrar de novo, documento: {rota_dados[0]}")
                     logging.info(f"Rota já processada: {rota_dados[0]}")
+                    time.sleep(1)
                     continue
 
                 rota = self.criar_objeto_rota(rota_dados)
