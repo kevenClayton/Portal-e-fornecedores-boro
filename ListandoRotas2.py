@@ -97,6 +97,11 @@ class GerenciadorRotas:
         self.controle_rotas = ControleRotas()
         self.carregar_dados()
         
+        # Configurações dos checkboxes
+        self.verificar_valor_carga = True
+        self.verificar_bobina = True
+        self.verificar_multiplos_destinos = True
+        
         # Limpar rotas antigas automaticamente (mais de 7 dias)
         self.controle_rotas.limpar_rotas_antigas(7)
         
@@ -137,10 +142,19 @@ class GerenciadorRotas:
         except Exception as e:
             logging.error(f"Erro ao mostrar status das rotas: {e}")
     
-    def listar_todas_rotas(self, tempo_espera: int = 30) -> None:
+    def listar_todas_rotas(self, tempo_espera: int = 30, verificar_valor_carga: bool = True, verificar_bobina: bool = True, verificar_multiplos_destinos: bool = True) -> None:
         """Navega para a página de listagem de rotas e configura filtros iniciais."""
         global quantidadeVerificouRota
         try:
+            # Configurar as opções dos checkboxes
+            self.verificar_valor_carga = verificar_valor_carga
+            self.verificar_bobina = verificar_bobina
+            self.verificar_multiplos_destinos = verificar_multiplos_destinos
+            
+            logging.info(f"Configurações: Verificar valor da carga: {verificar_valor_carga}")
+            logging.info(f"Configurações: Verificar bobina: {verificar_bobina}")
+            logging.info(f"Configurações: Verificar múltiplos destinos: {verificar_multiplos_destinos}")
+            
             # Mostrar status das rotas já processadas
             self.mostrar_status_rotas_processadas()
             urlAtual = self.driver.current_url
@@ -352,32 +366,53 @@ class GerenciadorRotas:
                 estado=self._tratar_valor_nan(dados_rota[11])
             )
             
-            # Obter dados adicionais
+            # Obter dados adicionais baseado nas configurações dos checkboxes
             # rota.observacoes = validarLetraProduto.pegarObservacoesRota(self.driver, rota.numero_documento)
-            try:
-                valor_carga_raw = pegarValorObservacao.tratarValorNoCampoObservacao(self.driver, rota.numero_documento)
-                if valor_carga_raw and str(valor_carga_raw).lower() != 'nan':
-                    rota.valor_carga = valor_carga_raw.strip().split(',')[0]
-                else:
+            
+            # Verificar valor da carga (condicional)
+            if self.verificar_valor_carga:
+                try:
+                    valor_carga_raw = pegarValorObservacao.tratarValorNoCampoObservacao(self.driver, rota.numero_documento)
+                    if valor_carga_raw and str(valor_carga_raw).lower() != 'nan':
+                        rota.valor_carga = valor_carga_raw.strip().split(',')[0]
+                    else:
+                        rota.valor_carga = ""
+                except Exception as e:
+                    logging.warning(f"Erro ao obter valor da carga para documento {rota.numero_documento}: {e}")
                     rota.valor_carga = ""
-            except Exception as e:
-                logging.warning(f"Erro ao obter valor da carga para documento {rota.numero_documento}: {e}")
+            else:
                 rota.valor_carga = ""
+                logging.info(f"Verificação de valor da carga desabilitada para documento {rota.numero_documento}")
             
-            # rota.tem_letra_b = validarLetraProduto.verificarTemLetraB(self.driver, rota.numero_documento)
+            # Verificar bobina (condicional)
+            if self.verificar_bobina:
+                try:
+                    rota.tem_letra_b = validarLetraProduto.verificarTemLetraB(self.driver, rota.numero_documento)
+                except Exception as e:
+                    logging.warning(f"Erro ao verificar bobina para documento {rota.numero_documento}: {e}")
+                    rota.tem_letra_b = False
+            else:
+                rota.tem_letra_b = False
+                logging.info(f"Verificação de bobina desabilitada para documento {rota.numero_documento}")
             
-            try:
-                dados_destinos = validarLetraProduto.verificarMultiplosDestinos(self.driver, rota.numero_documento)
-                if dados_destinos and len(dados_destinos) > 2:
-                    rota.clientes_mesmo_destino = self._tratar_valor_nan(dados_destinos[1])
-                    rota.mais_de_um_destino = bool(dados_destinos[2]) if dados_destinos[2] is not None else False
-                else:
+            # Verificar múltiplos destinos (condicional)
+            if self.verificar_multiplos_destinos:
+                try:
+                    dados_destinos = validarLetraProduto.verificarMultiplosDestinos(self.driver, rota.numero_documento)
+                    if dados_destinos and len(dados_destinos) > 2:
+                        rota.clientes_mesmo_destino = self._tratar_valor_nan(dados_destinos[1])
+                        rota.mais_de_um_destino = bool(dados_destinos[2]) if dados_destinos[2] is not None else False
+                    else:
+                        rota.clientes_mesmo_destino = ""
+                        rota.mais_de_um_destino = False
+                except Exception as e:
+                    logging.warning(f"Erro ao verificar múltiplos destinos para documento {rota.numero_documento}: {e}")
                     rota.clientes_mesmo_destino = ""
                     rota.mais_de_um_destino = False
-            except Exception as e:
-                logging.warning(f"Erro ao verificar múltiplos destinos para documento {rota.numero_documento}: {e}")
+            else:
                 rota.clientes_mesmo_destino = ""
                 rota.mais_de_um_destino = False
+                logging.info(f"Verificação de múltiplos destinos desabilitada para documento {rota.numero_documento}")
             
             return rota
             
@@ -1059,10 +1094,10 @@ def executar_sistema_rotas(driver: WebDriver, window=None, interface_ativa: bool
 
 
 # Manter compatibilidade com código existente
-def listarTodasRotas(driver, window, tempo_espera=30):
+def listarTodasRotas(driver, window, tempo_espera=30, verificar_valor_carga=True, verificar_bobina=True, verificar_multiplos_destinos=True):
     """Função de compatibilidade com código existente."""
     gerenciador = GerenciadorRotas(driver, window)
-    gerenciador.listar_todas_rotas(tempo_espera)
+    gerenciador.listar_todas_rotas(tempo_espera, verificar_valor_carga, verificar_bobina, verificar_multiplos_destinos)
 
 def selecionarOrigemDestino(driver, window, interface):
     """Função de compatibilidade com código existente."""

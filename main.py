@@ -26,6 +26,9 @@ login = dados['login']
 # Define the window's contents
 layout = [[sg.Text("Buscar e aceitar rotas no e-Fornecedor")],
 [sg.Text("Tempo de espera (segundos):"), sg.Input('30', key='-TEMPO_ESPERA-', size=(10,1))],
+[sg.Checkbox('Verificar valor da carga', key='-VERIFICAR_VALOR_CARGA-', default=True)],
+[sg.Checkbox('Verificar Bobina', key='-VERIFICAR_BOBINA-', default=True)],
+[sg.Checkbox('Verificar múltiplos destinos', key='-VERIFICAR_MULTIPLOS_DESTINOS-', default=True)],
 [sg.Text(size=(40,2), key='-OUTPUT-')],
 
 [sg.Button('Buscar e aceitar rotas'), sg.Button('Parar e sair do programa')]]
@@ -40,9 +43,15 @@ interface = False
 global valid
 global ambienteDesenvolvimento
 global tempo_espera
+global verificar_valor_carga
+global verificar_bobina
+global verificar_multiplos_destinos
 valid = 0
 ambienteDesenvolvimento = False
 tempo_espera = 30
+verificar_valor_carga = True
+verificar_bobina = True
+verificar_multiplos_destinos = True
 
 def teste():
     global valid
@@ -75,6 +84,15 @@ def teste():
                 tempo_espera = 30
                 window['-TEMPO_ESPERA-'].update('30')
                 print("Valor inválido para tempo de espera, usando padrão: 30 segundos")
+            
+            # Capturar os valores dos checkboxes
+            verificar_valor_carga = values['-VERIFICAR_VALOR_CARGA-']
+            verificar_bobina = values['-VERIFICAR_BOBINA-']
+            verificar_multiplos_destinos = values['-VERIFICAR_MULTIPLOS_DESTINOS-']
+            
+            print(f"Configurações: Verificar valor da carga: {verificar_valor_carga}")
+            print(f"Configurações: Verificar bobina: {verificar_bobina}")
+            print(f"Configurações: Verificar múltiplos destinos: {verificar_multiplos_destinos}")
             
             if ambienteDesenvolvimento == False:
                 now = datetime.now()
@@ -164,7 +182,7 @@ while True:
                     #se Tiver parado, pula a execulção da função e para o programa.
                     if interface == True:
 
-                        ListandoRotas2.listarTodasRotas(driver, window, tempo_espera)
+                        ListandoRotas2.listarTodasRotas(driver, window, tempo_espera, verificar_valor_carga, verificar_bobina, verificar_multiplos_destinos)
                     else:
                         break
                     if interface == True:
@@ -183,7 +201,7 @@ while True:
                     else:
                         break
                     if interface == True:
-                        ListandoRotas2.listarTodasRotas(driver, window, tempo_espera)
+                        ListandoRotas2.listarTodasRotas(driver, window, tempo_espera, verificar_valor_carga, verificar_bobina, verificar_multiplos_destinos)
                     else:
                         break
 
