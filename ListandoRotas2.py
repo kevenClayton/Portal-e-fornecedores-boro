@@ -445,6 +445,9 @@ class GerenciadorRotas:
             if tipo_veiculo.lower() != rota.tipo_transporte.lower():
                 return False
             
+            if self.verificar_valor_carga == False:                
+                return True
+
             valor_carga_formatado = float(rota.valor_carga.replace(".", ""))
             valor_parametro_carreta = round(self.dados['parametros'][0][3], 2)
             valor_parametro_truck = round(self.dados['parametros'][0][1], 2)
