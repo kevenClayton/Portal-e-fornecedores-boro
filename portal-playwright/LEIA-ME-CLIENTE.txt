@@ -1,0 +1,33 @@
+Portal E-Fornecedores v2
+========================
+
+Requisitos
+----------
+1. Windows 10/11
+2. Google Chrome instalado
+   https://www.google.com/chrome/
+
+Como usar
+---------
+1. Coloque nesta mesma pasta:
+   - PortalFornecedores.exe
+   - arquivo .env (ja configurado pela equipe)
+
+2. Dê dois cliques em PortalFornecedores.exe
+   (ou clique com o direito -> Executar)
+
+3. Uma janela preta (terminal) vai abrir com o status.
+   O Chrome abre sozinho — NAO FECHE o Chrome.
+
+4. Para parar: feche o terminal ou pressione Ctrl+C
+
+Problemas comuns
+----------------
+- "Nao foi possivel abrir Google Chrome"
+  -> Instale o Google Chrome e tente de novo
+
+- Janela fecha na hora
+  -> Falta o arquivo .env na mesma pasta do .exe
+
+- Erro de banco / login
+  -> Peça para a equipe revisar o .env
