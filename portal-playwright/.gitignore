@@ -5,3 +5,7 @@ __pycache__/
 logs/
 *.log
 .pytest_cache/
+build/
+dist/
+*.spec.bak
+src/portal_fornecedores/config/embedded.py

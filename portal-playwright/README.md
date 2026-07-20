@@ -1,64 +1,68 @@
 # Portal E-Fornecedores v2
 
-Automação do portal E-Fornecedores da Usiminas usando **Playwright**, com arquitetura modular e banco MySQL reformulado.
+Automação do portal E-Fornecedores com **Playwright** + MySQL.
 
-## Instalação (desenvolvimento)
+## Desenvolvimento (Mac/Linux)
 
 ```bash
 cd portal-playwright
 python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
+source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
-# Edite .env com suas credenciais
+cp .env.example .env   # configure DB_*
 python run.py
 ```
 
-O robô usa o **Google Chrome instalado** no PC (não precisa de `playwright install` no cliente).
+## Entregar SÓ o .exe para o cliente (sem .env)
 
-## Gerar .exe para Windows (cliente)
+Você está no Mac e o cliente no Windows: o build do `.exe` roda no **GitHub Actions** (Windows na nuvem). A config do banco entra **dentro** do executável — o cliente não vê `.env`.
 
-O build precisa ser feito **em um Windows** (PyInstaller não gera `.exe` a partir do Mac).
+### 1) Configurar Secrets no GitHub
 
-Para o cliente fica o mais simples possível:
-- 1 arquivo `PortalFornecedores.exe`
-- 1 arquivo `.env` ao lado
-- Google Chrome instalado
-- **Não** precisa Python nem Playwright
+No repositório: **Settings → Secrets and variables → Actions** e crie:
 
-### No PC Windows de build
+- `DB_HOST`
+- `DB_PORT` (ex.: `3306`)
+- `DB_USER`
+- `DB_PASSWORD`
+- `DB_NAME`
+- `PORTAL_URL` (opcional)
+- SMTP_* (opcional)
+
+### 2) Rodar o build
+
+1. Aba **Actions**
+2. Workflow **Build Windows EXE**
+3. **Run workflow**
+4. Informe o `cliente` (ex.: `madeforte`)
+5. Baixe o artefato `PortalFornecedores-madeforte.exe`
+
+### 3) Enviar ao cliente
+
+Mande **apenas** o `.exe`.  
+Ele precisa ter **Google Chrome** instalado e dar dois cliques. Nada de Python, `.env` ou instalação.
+
+> Igual ao modelo antigo com `config.py` dentro do PyInstaller: a senha fica no binário (dá para extrair com esforço). Não é cofre, mas a experiência do cliente é só o `.exe`.
+
+## Build manual (se tiver um Windows)
 
 ```bat
 cd portal-playwright
 build_windows.bat
 ```
 
-Saída: `dist\PortalFornecedores.exe`
+Isso lê o `.env` local, embute no código e gera `dist\PortalFornecedores.exe`.
 
-### O que enviar ao cliente
+## Subir no Portainer
 
-Pasta exemplo `Portal-MadeForte`:
+Arquivos prontos:
+- `Dockerfile`
+- `docker-compose.yml`
+- `.env.portainer.example`
+- guia: `PORTAINER.md`
 
-```
-PortalFornecedores.exe
-.env
-LEIA-ME-CLIENTE.txt
-```
-
-Use `.env.cliente.example` como modelo do `.env`.
-
-### No PC do cliente
-
-1. Instalar Google Chrome  
-2. Abrir `PortalFornecedores.exe`  
-3. Não fechar a janela do Chrome  
-4. Parar com `Ctrl+C` no terminal  
-
-## Fluxo
-
-1. Login no portal  
-2. Empresa Usiminas (id 85)  
-3. `SUCargaProgramada.ascx` → Pesquisar  
-4. Filtrar clusters do banco  
-5. Detalhes (valor/bobina/destinos) → validar → vincular  
-6. Gravar `rotas` / `relatorios` + e-mail  
+Resumo rápido:
+1. Portainer → **Stacks → Add stack → Repository**
+2. Compose path: `portal-playwright/docker-compose.yml`
+3. Env: `DB_*` + `PROXY` (BR se AWS for EUA)
+4. Deploy → Start/Stop pelos logs do container `portal-fornecedores`

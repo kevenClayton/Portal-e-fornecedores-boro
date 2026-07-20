@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Callable, Optional
 
 from playwright.sync_api import Browser, BrowserContext, Page, Playwright, sync_playwright
@@ -37,15 +38,27 @@ class BrowserManager:
 
   def start(self) -> Page:
     self._playwright = sync_playwright().start()
+
+    chrome_args = [
+      "--disable-blink-features=AutomationControlled",
+      "--disable-infobars",
+      "--no-first-run",
+      "--no-default-browser-check",
+    ]
+    # Flags necessárias dentro de Docker
+    if os.getenv("DOCKER", "").lower() in ("1", "true", "yes") or not self._settings.usar_chrome_sistema:
+      chrome_args.extend(
+        [
+          "--no-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-gpu",
+        ]
+      )
+
     launch_args = {
       "headless": self._settings.headless,
       "slow_mo": self._settings.slow_mo,
-      "args": [
-        "--disable-blink-features=AutomationControlled",
-        "--disable-infobars",
-        "--no-first-run",
-        "--no-default-browser-check",
-      ],
+      "args": chrome_args,
       "ignore_default_args": ["--enable-automation"],
     }
 
@@ -61,22 +74,28 @@ class BrowserManager:
     }
     if self._settings.proxy:
       context_options["proxy"] = self._parse_proxy(self._settings.proxy)
+      logger.info("Proxy configurado: %s", self._settings.proxy.split(":")[0])
 
     self._context = self._browser.new_context(**context_options)
     self._context.add_init_script(SCRIPT_STEALTH)
     self._page = self._context.new_page()
     self._page.set_default_timeout(30_000)
-    logger.info("Browser Playwright iniciado")
+    logger.info("Browser Playwright iniciado (headless=%s)", self._settings.headless)
     return self._page
 
   def _abrir_navegador(self, launch_args: dict) -> Browser:
-    # Cliente Windows: Chrome instalado (sem baixar Chromium do Playwright)
-    tentativas = [
-      ("Google Chrome do sistema", {"channel": "chrome"}),
-      ("Microsoft Edge do sistema", {"channel": "msedge"}),
-    ]
-    if not self._settings.usar_chrome_sistema:
-      tentativas.append(("Chromium Playwright", {}))
+    if self._settings.usar_chrome_sistema:
+      tentativas = [
+        ("Google Chrome do sistema", {"channel": "chrome"}),
+        ("Microsoft Edge do sistema", {"channel": "msedge"}),
+        ("Chromium Playwright", {}),
+      ]
+    else:
+      # Docker / servidor: Chromium embutido na imagem
+      tentativas = [
+        ("Chromium Playwright", {}),
+        ("Google Chrome do sistema", {"channel": "chrome"}),
+      ]
 
     erros = []
     for nome, extras in tentativas:
@@ -89,8 +108,7 @@ class BrowserManager:
         logger.warning("Nao foi possivel abrir %s: %s", nome, erro)
 
     raise RuntimeError(
-      "Nao foi possivel abrir Google Chrome. "
-      "Instale o Chrome e tente novamente. Detalhes: " + " | ".join(erros)
+      "Nao foi possivel abrir o navegador. Detalhes: " + " | ".join(erros)
     )
 
   def stop(self) -> None:
@@ -110,6 +128,8 @@ class BrowserManager:
         "username": partes[2],
         "password": partes[3],
       }
+    if len(partes) == 2:
+      return {"server": f"http://{partes[0]}:{partes[1]}"}
     return {"server": f"http://{proxy_string}"}
 
   def on_dialog(self, handler: Callable) -> None:

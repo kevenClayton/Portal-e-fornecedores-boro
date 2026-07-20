@@ -1,18 +1,30 @@
 from functools import lru_cache
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from portal_fornecedores.utils.paths import caminho_env
 
+try:
+  from portal_fornecedores.config.embedded import EMBEDDED
+except ImportError:
+  EMBEDDED = {}
+
+
+def _model_config() -> SettingsConfigDict:
+  env_path = caminho_env()
+  if env_path.exists():
+    return SettingsConfigDict(
+      env_file=str(env_path),
+      env_file_encoding="utf-8",
+      extra="ignore",
+    )
+  return SettingsConfigDict(extra="ignore")
+
 
 class Settings(BaseSettings):
-  model_config = SettingsConfigDict(
-    env_file=str(caminho_env()),
-    env_file_encoding="utf-8",
-    extra="ignore",
-  )
+  model_config = _model_config()
 
   cliente: str = "madeforte"
 
@@ -40,10 +52,7 @@ class Settings(BaseSettings):
 
   headless: bool = False
   slow_mo: int = 0
-
-  # No cliente Windows usamos Chrome instalado (channel=chrome)
   usar_chrome_sistema: bool = True
-
   empresa_usiminas_id: str = "85"
 
   url_cargas: str = (
@@ -76,4 +85,9 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-  return Settings()
+  base = Settings()
+  if not EMBEDDED:
+    return base
+  dados = base.model_dump()
+  dados.update(EMBEDDED)
+  return Settings(**dados)

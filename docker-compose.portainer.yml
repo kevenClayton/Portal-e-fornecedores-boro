@@ -1,0 +1,36 @@
+# Use este arquivo no Portainer se o Compose path for a raiz do repositório.
+# Compose path: docker-compose.portainer.yml
+#
+# Ou use: portal-playwright/docker-compose.yml (context relativo à pasta)
+
+services:
+  portal-fornecedores:
+    build:
+      context: ./portal-playwright
+      dockerfile: Dockerfile
+    image: portal-fornecedores:latest
+    container_name: portal-fornecedores
+    restart: unless-stopped
+    shm_size: "512mb"
+    environment:
+      CLIENTE: ${CLIENTE:-madeforte}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      PORTAL_URL: ${PORTAL_URL:-https://portal.e-fornecedores.ind.br/}
+      PROXY: ${PROXY:-}
+      HEADLESS: ${HEADLESS:-true}
+      USAR_CHROME_SISTEMA: "false"
+      DOCKER: "true"
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+    volumes:
+      - portal_logs:/app/logs
+
+volumes:
+  portal_logs:
