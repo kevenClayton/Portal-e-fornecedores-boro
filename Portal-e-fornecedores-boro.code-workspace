@@ -2,6 +2,12 @@
 	"folders": [
 		{
 			"path": "."
+		},
+		{
+			"path": "../madeforte"
+		},
+		{
+			"path": "../madeforte-painel"
 		}
 	]
 }

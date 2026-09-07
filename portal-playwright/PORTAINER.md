@@ -42,10 +42,15 @@ Depois no Portainer a stack aparece / você controla start-stop.
 
 | Ação | Onde |
 |------|------|
-| Iniciar robô | Portainer → container `portal-fornecedores` → **Start** |
-| Parar | **Stop** |
-| Ver status | **Logs** |
+| Iniciar robô | Painel → **Robô** → Start (ou Portainer → container `portal-fornecedores` → Start) |
+| Parar | Painel → **Robô** → Stop |
+| Ver status | Painel → Dashboard / Robô → Logs |
+| Configurar motoristas/destinos | Painel → Motoristas / Parâmetros |
 | Trocar proxy/banco | Edit stack → Environment variables → Update |
+
+O painel sobe no serviço `painel` (porta `PAINEL_PORT`, padrão 8080).
+Login inicial: `ADMIN_EMAIL` / `ADMIN_PASSWORD` (seed automático).
+
 
 ## Importante
 

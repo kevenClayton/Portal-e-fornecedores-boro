@@ -1,8 +1,8 @@
 # Portal E-Fornecedores v2
 
-Automação do portal E-Fornecedores com **Playwright** + MySQL.
+Automação do portal E-Fornecedores com **Playwright** + MySQL + painel Laravel.
 
-## Desenvolvimento (Mac/Linux)
+## Desenvolvimento (Mac/Linux) — robô
 
 ```bash
 cd portal-playwright
@@ -12,6 +12,30 @@ pip install -r requirements.txt
 cp .env.example .env   # configure DB_*
 python run.py
 ```
+
+## Painel admin (Laravel)
+
+O painel fica em `painel/` e usa o **mesmo banco** do robô (`madeforte01`).
+
+```bash
+cd portal-playwright/painel
+cp .env.example .env
+# preencha DB_* , APP_KEY (php artisan key:generate)
+# ADMIN_EMAIL / ADMIN_PASSWORD
+composer install
+php artisan migrate --force
+php artisan db:seed --force
+npm install && npm run build
+php artisan serve
+```
+
+Acesse `http://127.0.0.1:8000` → login com `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
+
+Telas: Dashboard, Motoristas, Parâmetros, Rotas, Relatórios, Robô (start/stop/logs).
+
+Controle do robô:
+- Na mesma máquina do Docker: `ROBO_USAR_DOCKER_CLI=true`
+- Remoto via Portainer: preencha `ROBO_PORTAINER_URL` + `ROBO_PORTAINER_API_KEY` e `ROBO_USAR_DOCKER_CLI=false`
 
 ## Entregar SÓ o .exe para o cliente (sem .env)
 
@@ -53,16 +77,30 @@ build_windows.bat
 
 Isso lê o `.env` local, embute no código e gera `dist\PortalFornecedores.exe`.
 
+## Guia do cliente
+
+Uma página para entregar ao cliente (acesso, cadastro, start/stop, problemas comuns):
+
+→ [`COMO-USAR-CLIENTE.md`](COMO-USAR-CLIENTE.md)
+
 ## Subir no Portainer
 
 Arquivos prontos:
-- `Dockerfile`
-- `docker-compose.yml`
+- `Dockerfile` (robô)
+- `painel/Dockerfile` (painel admin)
+- `docker-compose.yml` (robô + painel)
 - `.env.portainer.example`
 - guia: `PORTAINER.md`
 
 Resumo rápido:
 1. Portainer → **Stacks → Add stack → Repository**
 2. Compose path: `portal-playwright/docker-compose.yml`
-3. Env: `DB_*` + `PROXY` (BR se AWS for EUA)
-4. Deploy → Start/Stop pelos logs do container `portal-fornecedores`
+3. Env: `DB_*` + `PROXY` (BR se AWS for EUA) + `PAINEL_APP_KEY` + `ADMIN_*`
+4. Deploy → painel em `:8080` · robô no container `portal-fornecedores`
+5. No painel: **Robô** → Start/Stop (com `ROBO_USAR_DOCKER_CLI=true` na mesma EC2)
+
+Gere a key do painel:
+```bash
+cd portal-playwright/painel && php artisan key:generate --show
+```
+Use o valor em `PAINEL_APP_KEY`.

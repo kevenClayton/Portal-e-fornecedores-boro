@@ -63,6 +63,12 @@ class CargasPage:
       return
 
     status("Selecionando empresa Solucoes Usiminas (85)...")
+    # LoginPage.contornar_aviso_navegador — import local evita ciclo
+    from portal_fornecedores.browser.pages.login_page import LoginPage
+
+    login_helper = LoginPage(self._page, self._settings)
+    login_helper.aceitar_cookies()
+    login_helper.contornar_aviso_navegador()
     self._page.wait_for_selector(self.SELECTOR_EMPRESA, timeout=30_000)
     self._page.locator(self.SELECTOR_EMPRESA).click()
     self._page.wait_for_timeout(200)

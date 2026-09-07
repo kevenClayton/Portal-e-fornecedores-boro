@@ -84,14 +84,18 @@ class BrowserManager:
     return self._page
 
   def _abrir_navegador(self, launch_args: dict) -> Browser:
-    if self._settings.usar_chrome_sistema:
+    # Em Docker preferimos Chrome real: o portal cai em browserinfo.ascx com Chromium Playwright
+    preferir_chrome = (
+      self._settings.usar_chrome_sistema
+      or os.getenv("DOCKER", "").lower() in ("1", "true", "yes")
+    )
+    if preferir_chrome:
       tentativas = [
         ("Google Chrome do sistema", {"channel": "chrome"}),
         ("Microsoft Edge do sistema", {"channel": "msedge"}),
         ("Chromium Playwright", {}),
       ]
     else:
-      # Docker / servidor: Chromium embutido na imagem
       tentativas = [
         ("Chromium Playwright", {}),
         ("Google Chrome do sistema", {"channel": "chrome"}),
