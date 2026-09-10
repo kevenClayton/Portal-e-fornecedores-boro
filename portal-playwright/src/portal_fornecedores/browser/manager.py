@@ -1,5 +1,8 @@
 import logging
 import os
+import re
+import shutil
+import subprocess
 from typing import Callable, Optional
 
 from playwright.sync_api import Browser, BrowserContext, Page, Playwright, sync_playwright
@@ -8,11 +11,30 @@ from portal_fornecedores.config.settings import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
-USER_AGENT_CHROME = (
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-  "AppleWebKit/537.36 (KHTML, like Gecko) "
-  "Chrome/122.0.0.0 Safari/537.36"
-)
+
+def _user_agent_chrome() -> str:
+  """Alinha o UA com a versão real do Chrome — mismatch derruba score do reCAPTCHA."""
+  versao = "131.0.0.0"
+  for comando in (
+    ["google-chrome", "--version"],
+    ["google-chrome-stable", "--version"],
+    ["chromium-browser", "--version"],
+  ):
+    if not shutil.which(comando[0]):
+      continue
+    try:
+      saida = subprocess.check_output(comando, text=True, stderr=subprocess.DEVNULL, timeout=5)
+      match = re.search(r"(\d+)\.(\d+)\.(\d+)\.(\d+)", saida)
+      if match:
+        versao = f"{match.group(1)}.0.0.0"
+        break
+    except Exception:
+      continue
+  return (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    f"Chrome/{versao} Safari/537.36"
+  )
 
 SCRIPT_STEALTH = """
 Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
@@ -64,14 +86,17 @@ class BrowserManager:
 
     self._browser = self._abrir_navegador(launch_args)
 
+    user_agent = _user_agent_chrome()
     context_options = {
-      "user_agent": USER_AGENT_CHROME,
+      "user_agent": user_agent,
       "viewport": {"width": 1366, "height": 768},
       "locale": "pt-BR",
+      "timezone_id": "America/Sao_Paulo",
       "extra_http_headers": {
         "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
       },
     }
+    logger.info("User-Agent: %s", user_agent)
     if self._settings.proxy:
       context_options["proxy"] = self._parse_proxy(self._settings.proxy)
       logger.info("Proxy configurado: %s", self._settings.proxy.split(":")[0])

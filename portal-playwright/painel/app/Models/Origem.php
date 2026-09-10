@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToCliente;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Origem extends Model
 {
+    use BelongsToCliente;
+
     protected $table = 'origens';
 
     public $timestamps = false;

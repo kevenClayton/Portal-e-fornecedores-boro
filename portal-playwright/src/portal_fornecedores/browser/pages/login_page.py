@@ -226,8 +226,16 @@ class LoginPage:
     self.navegar()
     self._page.wait_for_selector(self.SELECTOR_USUARIO, timeout=30_000)
     self.aceitar_cookies()
-    self._page.locator(self.SELECTOR_USUARIO).fill(usuario)
-    self._page.locator(self.SELECTOR_SENHA).fill(senha)
+    self._page.wait_for_timeout(800)
+
+    campo_usuario = self._page.locator(self.SELECTOR_USUARIO)
+    campo_senha = self._page.locator(self.SELECTOR_SENHA)
+    campo_usuario.click()
+    campo_usuario.fill(usuario)
+    self._page.wait_for_timeout(350)
+    campo_senha.click()
+    campo_senha.fill(senha)
+    self._page.wait_for_timeout(500)
 
     try:
       self._page.evaluate(
@@ -240,8 +248,9 @@ class LoginPage:
     except Exception:
       pass
 
-    # Pré-gera o token (mais estável no Docker) e evita o handler async do ASP.NET
+    # Token gerado imediatamente antes do clique — tokens velhos / score baixo viram "Captcha inválido"
     self._preencher_token_recaptcha()
+    self._page.wait_for_timeout(400)
     try:
       with self._page.expect_navigation(wait_until="domcontentloaded", timeout=45_000):
         self._page.locator(self.SELECTOR_BOTAO).click()

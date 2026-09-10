@@ -41,6 +41,13 @@ class ParametrosOperacao:
   modo_teste: bool
   email_notificacao: str
   intervalo_espera_seg: int = 30
+  verificar_valor_carga: bool = True
+  verificar_bobina: bool = True
+  verificar_multiplos_destinos: bool = True
+  whatsapp_telefones: str = ""
+  whatsapp_codigo_estabelecimento: Optional[int] = None
+  painel_url_publica: str = ""
+  robo_quantidade: int = 1
 
 
 @dataclass
@@ -49,3 +56,5 @@ class ConfiguracaoBusca:
   verificar_bobina: bool = True
   verificar_multiplos_destinos: bool = True
   tempo_espera_seg: int = 30
+  robo_quantidade: int = 1
+  robo_slot: int = 1

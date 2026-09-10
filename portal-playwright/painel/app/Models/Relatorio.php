@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToCliente;
 use Illuminate\Database\Eloquent\Model;
 
 class Relatorio extends Model
 {
+    use BelongsToCliente;
+
     protected $table = 'relatorios';
 
     protected $guarded = [];

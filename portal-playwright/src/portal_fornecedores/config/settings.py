@@ -48,7 +48,19 @@ class Settings(BaseSettings):
   smtp_password: str = ""
   smtp_from: str = ""
 
+  # WhatsApp (API ReservaAI)
+  whatsapp_api_url: str = "https://api.reservaai.com.br/api"
+  whatsapp_api_token: str = ""
+  painel_url_publica: str = "https://madeforte.reservaai.com.br"
+
   proxy: Optional[str] = Field(default=None, description="host:porta ou host:porta:user:pass")
+  webshare_api_token: str = ""
+  webshare_plan_id: Optional[int] = Field(
+    default=None,
+    description="ID do plano Webshare (ISP/residential). Vazio = detecta automaticamente.",
+  )
+  robo_slot: int = Field(default=1, description="Identificador do robô na frota (1–3)")
+  cliente_id: int = Field(default=1, description="ID do cliente multi-tenant no banco compartilhado")
 
   headless: bool = False
   slow_mo: int = 0

@@ -25,6 +25,7 @@ class RotaService:
     repository: DadosRepository,
     email_service: EmailService,
     on_status: Optional[Callable[[str], None]] = None,
+    on_heartbeat: Optional[Callable[[], None]] = None,
   ):
     self._login = login_page
     self._cargas = cargas_page
@@ -33,6 +34,7 @@ class RotaService:
     self._repo = repository
     self._email = email_service
     self._on_status = on_status or (lambda msg: None)
+    self._on_heartbeat = on_heartbeat or (lambda: None)
     self._parametros: Optional[ParametrosOperacao] = None
     self._ativo = True
 
@@ -55,6 +57,28 @@ class RotaService:
     self._repo.limpar_processados_antigos(horas=24)
     usuario, senha = self._repo.obter_login()
 
+    # Opções operacionais vêm do banco (painel → Iniciar robô / Parâmetros)
+    config.tempo_espera_seg = max(1, int(self._parametros.intervalo_espera_seg or 30))
+    config.verificar_valor_carga = bool(self._parametros.verificar_valor_carga)
+    config.verificar_bobina = bool(self._parametros.verificar_bobina)
+    config.verificar_multiplos_destinos = bool(self._parametros.verificar_multiplos_destinos)
+    config.robo_quantidade = max(1, min(3, int(self._parametros.robo_quantidade or 1)))
+    # config.robo_slot vem do env ROBO_SLOT (main.py) e não muda aqui
+
+    espera_individual = config.tempo_espera_seg * config.robo_quantidade
+    self._status(
+      "Ciclo — frota={frota} slot={slot} | busca a cada {cadencia}s | espera deste robô={espera}s | "
+      "detalhes: valor={valor} bobina={bobina} destinos={destinos}".format(
+        frota=config.robo_quantidade,
+        slot=config.robo_slot,
+        cadencia=config.tempo_espera_seg,
+        espera=espera_individual,
+        valor="sim" if config.verificar_valor_carga else "nao",
+        bobina="sim" if config.verificar_bobina else "nao",
+        destinos="sim" if config.verificar_multiplos_destinos else "nao",
+      )
+    )
+
     # --- 1) Login (igual fazendoLogin.py + main.py) ---
     self._status("Verificando se esta logado...")
     logado = self._login.esta_logado()
@@ -71,7 +95,13 @@ class RotaService:
       return
 
     # --- 2) listarTodasRotas ---
-    self._cargas.listar_todas_rotas(config.tempo_espera_seg, on_status=self._status)
+    self._cargas.listar_todas_rotas(
+      tempo_espera_seg=config.tempo_espera_seg,
+      on_status=self._on_status,
+      on_heartbeat=self._on_heartbeat,
+      robo_quantidade=config.robo_quantidade,
+      robo_slot=config.robo_slot,
+    )
 
     if not self._ativo:
       return
@@ -91,8 +121,13 @@ class RotaService:
       self._status("Nenhum cluster encontrado no portal")
       return
 
+    total = len(clusters_portal)
     existentes = 0
     inexistentes = 0
+    verificados = 0
+    ultimo_progresso = 0
+
+    self._status(f"Filtrando {total} cluster(s) do portal contra motoristas ativos...")
 
     for cluster in clusters_portal:
       if not self._ativo:
@@ -102,9 +137,18 @@ class RotaService:
       if not cluster_limpo:
         continue
 
+      verificados += 1
+
       if cluster_limpo.lower() not in destinos_banco:
         inexistentes += 1
-        self._status(f"Cluster nao existente na base: {cluster_limpo}")
+        logger.info("Cluster nao existente na base: %s", cluster_limpo)
+        # Progresso na timeline a cada 10 (evita 2 min sem evento e spam de 36 linhas)
+        if verificados - ultimo_progresso >= 10 or verificados == total:
+          self._status(
+            f"Filtrando clusters: {verificados}/{total} | "
+            f"com motorista: {existentes} | sem: {inexistentes}"
+          )
+          ultimo_progresso = verificados
         continue
 
       existentes += 1
@@ -118,7 +162,7 @@ class RotaService:
       self._processar_resultados_rota(cluster_limpo, config)
 
     self._status(
-      f"Resumo filtros — existentes: {existentes} | inexistentes: {inexistentes} | total: {len(clusters_portal)}"
+      f"Resumo filtros — existentes: {existentes} | inexistentes: {inexistentes} | total: {total}"
     )
 
     if existentes == 0:
@@ -147,8 +191,8 @@ class RotaService:
       if not self._ativo:
         return
 
-      if self._repo.documento_ja_processado(rota.numero_documento):
-        self._status(f"Ja processou documento: {rota.numero_documento}")
+      if not self._repo.tentar_reservar_documento(rota.numero_documento):
+        self._status(f"Doc {rota.numero_documento} ja reservado por outro robô/ciclo")
         continue
 
       self._status(

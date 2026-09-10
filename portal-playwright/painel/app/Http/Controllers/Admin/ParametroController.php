@@ -8,8 +8,10 @@ use App\Models\LoginPortal;
 use App\Models\Origem;
 use App\Models\Parametro;
 use App\Models\TipoVeiculo;
+use App\Support\Tenant;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class ParametroController extends Controller
@@ -17,6 +19,7 @@ class ParametroController extends Controller
     public function index(Request $request): View
     {
         $buscaDestino = trim((string) $request->query('destino', ''));
+        $podeEditarLogin = (bool) $request->user()?->is_super_admin;
 
         return view('admin.parametros.index', [
             'parametro' => Parametro::query()->orderBy('id')->first() ?? new Parametro([
@@ -26,6 +29,12 @@ class ParametroController extends Controller
                 'modo_teste' => true,
                 'email_notificacao' => '',
                 'intervalo_espera_seg' => 30,
+                'verificar_valor_carga' => true,
+                'verificar_bobina' => true,
+                'verificar_multiplos_destinos' => true,
+                'whatsapp_telefones' => '',
+                'whatsapp_codigo_estabelecimento' => null,
+                'painel_url_publica' => 'https://efornecedor.reservaai.com.br',
             ]),
             'loginPortal' => LoginPortal::query()->orderBy('id')->first() ?? new LoginPortal([
                 'ativo' => true,
@@ -38,6 +47,7 @@ class ParametroController extends Controller
                 ->withQueryString(),
             'tipos' => TipoVeiculo::query()->orderBy('nome_tipo_veiculo')->get(),
             'buscaDestino' => $buscaDestino,
+            'podeEditarLogin' => $podeEditarLogin,
         ]);
     }
 
@@ -50,10 +60,24 @@ class ParametroController extends Controller
             'email_notificacao' => ['nullable', 'string', 'max:255'],
             'intervalo_espera_seg' => ['required', 'integer', 'min:1'],
             'modo_teste' => ['nullable', 'boolean'],
+            'verificar_valor_carga' => ['nullable', 'boolean'],
+            'verificar_bobina' => ['nullable', 'boolean'],
+            'verificar_multiplos_destinos' => ['nullable', 'boolean'],
+            'whatsapp_telefones' => ['nullable', 'string', 'max:2000'],
+            'whatsapp_codigo_estabelecimento' => ['nullable', 'integer', 'min:1'],
+            'painel_url_publica' => ['nullable', 'url', 'max:255'],
         ]);
 
         $dados['modo_teste'] = $request->boolean('modo_teste');
+        $dados['verificar_valor_carga'] = $request->boolean('verificar_valor_carga');
+        $dados['verificar_bobina'] = $request->boolean('verificar_bobina');
+        $dados['verificar_multiplos_destinos'] = $request->boolean('verificar_multiplos_destinos');
         $dados['email_notificacao'] = $dados['email_notificacao'] ?? '';
+        $dados['whatsapp_telefones'] = trim((string) ($dados['whatsapp_telefones'] ?? ''));
+        $dados['painel_url_publica'] = rtrim((string) ($dados['painel_url_publica'] ?? ''), '/');
+        if (($dados['whatsapp_codigo_estabelecimento'] ?? null) === '') {
+            $dados['whatsapp_codigo_estabelecimento'] = null;
+        }
 
         $parametro = Parametro::query()->orderBy('id')->first();
         if ($parametro) {
@@ -67,6 +91,10 @@ class ParametroController extends Controller
 
     public function atualizarLogin(Request $request): RedirectResponse
     {
+        if (! $request->user()?->is_super_admin) {
+            abort(403, 'Somente o super admin pode alterar o login do portal.');
+        }
+
         $dados = $request->validate([
             'usuario' => ['required', 'string', 'max:100'],
             'senha' => ['required', 'string', 'max:255'],
@@ -86,8 +114,14 @@ class ParametroController extends Controller
 
     public function storeOrigem(Request $request): RedirectResponse
     {
+        $clienteId = Tenant::requireId();
         $dados = $request->validate([
-            'nome_origem' => ['required', 'string', 'max:150', 'unique:origens,nome_origem'],
+            'nome_origem' => [
+                'required',
+                'string',
+                'max:150',
+                Rule::unique('origens', 'nome_origem')->where(fn ($query) => $query->where('cliente_id', $clienteId)),
+            ],
         ]);
         Origem::query()->create([
             'nome_origem' => $dados['nome_origem'],
@@ -107,8 +141,14 @@ class ParametroController extends Controller
 
     public function storeDestino(Request $request): RedirectResponse
     {
+        $clienteId = Tenant::requireId();
         $dados = $request->validate([
-            'nome_destino' => ['required', 'string', 'max:150', 'unique:destinos,nome_destino'],
+            'nome_destino' => [
+                'required',
+                'string',
+                'max:150',
+                Rule::unique('destinos', 'nome_destino')->where(fn ($query) => $query->where('cliente_id', $clienteId)),
+            ],
         ]);
         Destino::query()->create([
             'nome_destino' => $dados['nome_destino'],
@@ -128,8 +168,14 @@ class ParametroController extends Controller
 
     public function storeTipo(Request $request): RedirectResponse
     {
+        $clienteId = Tenant::requireId();
         $dados = $request->validate([
-            'nome_tipo_veiculo' => ['required', 'string', 'max:50', 'unique:tipo_veiculo,nome_tipo_veiculo'],
+            'nome_tipo_veiculo' => [
+                'required',
+                'string',
+                'max:50',
+                Rule::unique('tipo_veiculo', 'nome_tipo_veiculo')->where(fn ($query) => $query->where('cliente_id', $clienteId)),
+            ],
         ]);
         TipoVeiculo::query()->create([
             'nome_tipo_veiculo' => $dados['nome_tipo_veiculo'],

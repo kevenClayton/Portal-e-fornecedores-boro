@@ -34,7 +34,7 @@ Se o destino do portal não existir no cadastro (com o **mesmo texto** do cluste
 | **Dashboard** | Visão geral |
 | **Motoristas** | Cadastrar / editar motoristas, placa, CPF, tipos de veículo |
 | **Ordem / Gerenciar** | Definir prioridade entre motoristas |
-| **Parâmetros** | Login do portal, destinos, origens, tipos de veículo, valores |
+| **Parâmetros** | Login do portal, destinos, origens, WhatsApp, valores |
 | **Rotas** | Histórico de rotas tratadas |
 | **Relatórios** | Consultas / exportação |
 | **Robô** | Ligar, desligar e ver logs |
@@ -65,6 +65,15 @@ Para cada motorista ativo:
 
 ### 4.4 Ordem
 Em **Gerenciar / Ordem**, coloque primeiro quem deve ter prioridade na vinculação.
+
+### 4.5 WhatsApp
+Em **Parâmetros** → seção WhatsApp:
+
+- **Telefones** que recebem alerta quando a carga for **aceita** ou **perdida**
+- **Código do estabelecimento** (API ReservaAI)
+- **URL pública do painel** (ex.: `https://madeforte.reservaai.com.br`)
+
+O botão “Ver detalhes” do WhatsApp abre a página pública `/carga/{id}` com o resumo da ocorrência.
 
 ---
 

@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToCliente;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Destino extends Model
 {
+    use BelongsToCliente;
+
     protected $table = 'destinos';
 
     public $timestamps = false;

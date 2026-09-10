@@ -26,9 +26,38 @@ CREATE TABLE IF NOT EXISTS parametros (
     modo_teste              BOOLEAN NOT NULL DEFAULT TRUE COMMENT 'TRUE = não vincula de verdade',
     email_notificacao       VARCHAR(255) NOT NULL DEFAULT '',
     intervalo_espera_seg    INT NOT NULL DEFAULT 30,
+    verificar_valor_carga   BOOLEAN NOT NULL DEFAULT TRUE COMMENT 'Abrir obs e ler valor da carga',
+    verificar_bobina        BOOLEAN NOT NULL DEFAULT TRUE COMMENT 'Abrir itens da carga e checar letra B',
+    verificar_multiplos_destinos BOOLEAN NOT NULL DEFAULT TRUE COMMENT 'Abrir remessas e checar multiplos destinos',
+    whatsapp_telefones      TEXT NULL COMMENT 'Telefones WhatsApp (virgula/linha)',
+    whatsapp_codigo_estabelecimento INT NULL DEFAULT NULL,
+    painel_url_publica      VARCHAR(255) NULL DEFAULT NULL,
+    robo_agenda_ativa       TINYINT(1) NOT NULL DEFAULT 0,
+    robo_hora_ligar         TIME NULL DEFAULT '06:00:00',
+    robo_hora_desligar      TIME NULL DEFAULT '22:00:00',
+    robo_quantidade         TINYINT UNSIGNED NOT NULL DEFAULT 1,
     created_at              DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at              DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS notificacoes_carga (
+    id                  BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    public_id           CHAR(36) NOT NULL,
+    situacao            VARCHAR(40) NOT NULL COMMENT 'aceita | perdida',
+    motorista           VARCHAR(200) NOT NULL DEFAULT '',
+    numero_documento    VARCHAR(100) NOT NULL,
+    motivo              TEXT NULL,
+    origem              VARCHAR(255) NULL,
+    destino             VARCHAR(255) NULL,
+    valor_carga         VARCHAR(50) NULL,
+    tipo_transporte     VARCHAR(100) NULL,
+    placa               VARCHAR(20) NULL,
+    cpf                 VARCHAR(20) NULL,
+    created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_notificacoes_carga_public_id (public_id),
+    INDEX idx_notificacoes_carga_doc (numero_documento),
+    INDEX idx_notificacoes_carga_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Plantas de origem
 CREATE TABLE IF NOT EXISTS origens (

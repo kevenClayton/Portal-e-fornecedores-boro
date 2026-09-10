@@ -4,15 +4,28 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{{ config('app.name') }} — Entrar</title>
+    <title>{{ $branding['nome'] ?? config('app.name') }} — Entrar</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <style>
+        :root {
+            --accent: {{ $branding['cor_primaria'] ?? '#0d7a6f' }};
+            --accent-hover: {{ $branding['cor_accent'] ?? '#0a635a' }};
+            --accent-soft: {{ $branding['cor_soft'] ?? '#d8f0ec' }};
+        }
+        .bg-brand { background-color: var(--accent) !important; }
+        .text-brand { color: var(--accent) !important; }
+    </style>
 </head>
 <body class="min-h-screen bg-paper text-ink antialiased">
+@php
+    $nomeMarca = $branding['nome'] ?? 'E-Fornecedor';
+    $subtituloMarca = $branding['subtitulo'] ?? 'Portal multi-cliente';
+@endphp
 <div class="min-h-screen grid lg:grid-cols-2">
     <section class="relative hidden lg:flex flex-col justify-between p-10 text-white overflow-hidden"
              style="background:
-                radial-gradient(circle at 15% 20%, rgba(13,122,111,.55), transparent 40%),
-                linear-gradient(160deg, #0f1c24 0%, #1a3340 55%, #0d7a6f 140%);">
+                radial-gradient(circle at 15% 20%, color-mix(in srgb, var(--accent) 55%, transparent), transparent 40%),
+                linear-gradient(160deg, #0f1c24 0%, #1a3340 55%, var(--accent) 140%);">
         <div>
             <div class="inline-flex items-center gap-3">
                 <div class="h-12 w-12 rounded-2xl bg-brand flex items-center justify-center">
@@ -21,8 +34,8 @@
                     </svg>
                 </div>
                 <div>
-                    <div class="font-display text-2xl leading-none">MadeForte</div>
-                    <div class="text-sm text-slate-300 mt-1">Portal E-Fornecedores</div>
+                    <div class="font-display text-2xl leading-none">{{ $nomeMarca }}</div>
+                    <div class="text-sm text-slate-300 mt-1">{{ $subtituloMarca }}</div>
                 </div>
             </div>
         </div>
@@ -40,8 +53,8 @@
     <section class="flex items-center justify-center p-6 sm:p-10">
         <div class="w-full max-w-md">
             <div class="lg:hidden mb-8">
-                <div class="font-display text-2xl">MadeForte</div>
-                <div class="text-sm text-slate-500">Painel do robô</div>
+                <div class="font-display text-2xl">{{ $nomeMarca }}</div>
+                <div class="text-sm text-slate-500">{{ $subtituloMarca }}</div>
             </div>
 
             <div class="panel-pad shadow-soft">

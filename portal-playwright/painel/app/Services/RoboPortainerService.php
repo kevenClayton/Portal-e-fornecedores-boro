@@ -7,35 +7,174 @@ use Illuminate\Support\Facades\Http;
 
 class RoboPortainerService
 {
+    /** @var list<string> */
+    protected array $containerNames;
+
     protected string $baseUrl;
 
     protected string $apiKey;
 
     protected int $endpointId;
 
-    protected string $containerName;
-
     public function __construct()
     {
         $this->baseUrl = (string) config('robo.portainer_url');
         $this->apiKey = (string) config('robo.portainer_api_key');
         $this->endpointId = (int) config('robo.portainer_endpoint_id', 1);
-        $this->containerName = (string) config('robo.container_name', 'portal-fornecedores');
+        $this->aplicarContainersPadrao();
     }
 
-    public function status(): array
+    public function aplicarContainersPadrao(): void
     {
-        if (config('robo.usar_docker_cli')) {
-            return $this->statusDockerCli();
+        $nomes = config('robo.container_names', []);
+        if (! is_array($nomes) || $nomes === []) {
+            $nomes = [(string) config('robo.container_name', 'portal-fornecedores')];
+        }
+        $this->definirContainers($nomes);
+    }
+
+    /**
+     * @param  list<string>  $nomes
+     */
+    public function definirContainers(array $nomes): void
+    {
+        $filtrados = array_values(array_unique(array_filter(array_map('strval', $nomes))));
+        $this->containerNames = $filtrados !== []
+            ? $filtrados
+            : [(string) config('robo.container_name', 'portal-fornecedores')];
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function nomesDisponiveis(): array
+    {
+        return $this->containerNames;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function nomesAtivos(int $quantidade): array
+    {
+        $quantidade = max(1, min(count($this->containerNames), $quantidade));
+
+        return array_slice($this->containerNames, 0, $quantidade);
+    }
+
+    public function status(?int $quantidadeDesejada = null): array
+    {
+        $robots = [];
+        foreach ($this->containerNames as $indice => $nome) {
+            $slot = $indice + 1;
+            $robots[] = array_merge(
+                $this->statusUm($nome),
+                ['slot' => $slot, 'active_slot' => $quantidadeDesejada === null || $slot <= $quantidadeDesejada],
+            );
         }
 
-        $container = $this->encontrarContainer();
+        $ligados = array_values(array_filter(
+            $robots,
+            fn (array $robot) => ($robot['active_slot'] ?? true) && ($robot['running'] ?? false),
+        ));
+        $runningCount = count(array_filter($robots, fn (array $robot) => $robot['running'] ?? false));
+
+        return [
+            'running' => $runningCount > 0,
+            'running_count' => $runningCount,
+            'desired_count' => $quantidadeDesejada,
+            'robots' => $robots,
+            'name' => $this->containerNames[0] ?? 'portal-fornecedores',
+            'status' => $runningCount > 0 ? 'running' : 'stopped',
+            'message' => $runningCount > 0
+                ? "{$runningCount} robô(s) em execução"
+                : 'Nenhum robô em execução',
+        ];
+    }
+
+    public function start(int $quantidade = 1): array
+    {
+        $ativos = $this->nomesAtivos($quantidade);
+        $erros = [];
+
+        foreach ($this->containerNames as $nome) {
+            try {
+                if (in_array($nome, $ativos, true)) {
+                    $this->executarAcao($nome, 'start');
+                } else {
+                    $this->executarAcao($nome, 'stop');
+                }
+            } catch (Exception $erro) {
+                $erros[] = "{$nome}: ".$erro->getMessage();
+            }
+        }
+
+        $status = $this->status($quantidade);
+        if ($erros !== [] && ($status['running_count'] ?? 0) === 0) {
+            throw new Exception(implode(' | ', $erros));
+        }
+
+        return $status;
+    }
+
+    public function stop(): array
+    {
+        $erros = [];
+        foreach ($this->containerNames as $nome) {
+            try {
+                $this->executarAcao($nome, 'stop');
+            } catch (Exception $erro) {
+                $erros[] = "{$nome}: ".$erro->getMessage();
+            }
+        }
+
+        $status = $this->status(0);
+        if ($erros !== [] && ($status['running_count'] ?? 0) > 0) {
+            throw new Exception(implode(' | ', $erros));
+        }
+
+        return $status;
+    }
+
+    public function logs(int $tail = 200, ?int $slot = null): string
+    {
+        $tail = max(20, min(400, $tail));
+        if ($slot !== null) {
+            $indice = max(1, min(count($this->containerNames), $slot)) - 1;
+            $nome = $this->containerNames[$indice];
+
+            return "===== {$nome} (slot ".($indice + 1).") =====\n".$this->logsUm($nome, $tail);
+        }
+
+        // Só o primeiro container por padrão (rápido). Evita bloquear o php -S com 3x docker logs.
+        $nome = $this->containerNames[0] ?? 'portal-fornecedores';
+
+        return "===== {$nome} (slot 1) =====\n".$this->logsUm($nome, $tail)
+            ."\n\n(Dica: logs dos slots 2/3 sob demanda — use ?slot=2 ou ?slot=3)";
+    }
+
+    protected function statusUm(string $nome): array
+    {
+        if (config('robo.usar_docker_cli')) {
+            $escaped = escapeshellarg($nome);
+            $estado = trim((string) shell_exec("timeout 2s docker inspect -f '{{.State.Status}}' {$escaped} 2>/dev/null"));
+            $running = $estado === 'running';
+
+            return [
+                'running' => $running,
+                'status' => $estado !== '' ? $estado : 'not_found',
+                'name' => $nome,
+                'message' => $running ? 'Em execução' : ($estado !== '' ? 'Parado' : 'Container não encontrado'),
+            ];
+        }
+
+        $container = $this->encontrarContainer($nome);
         if (! $container) {
             return [
                 'running' => false,
                 'status' => 'not_found',
-                'message' => 'Container não encontrado: '.$this->containerName,
-                'name' => $this->containerName,
+                'name' => $nome,
+                'message' => 'Container não encontrado',
             ];
         }
 
@@ -46,58 +185,56 @@ class RoboPortainerService
             'running' => $running,
             'status' => $state,
             'id' => $container['Id'] ?? null,
-            'name' => $this->containerName,
-            'message' => $running ? 'Robô em execução' : 'Robô parado',
+            'name' => $nome,
+            'message' => $running ? 'Em execução' : 'Parado',
         ];
     }
 
-    public function start(): array
+    protected function executarAcao(string $nome, string $acao): void
     {
+        $acao = $acao === 'start' ? 'start' : 'stop';
+
         if (config('robo.usar_docker_cli')) {
-            return $this->execDockerCli('start');
+            $escaped = escapeshellarg($nome);
+            shell_exec("docker {$acao} {$escaped} 2>&1");
+
+            return;
         }
 
-        $container = $this->encontrarContainer();
+        $container = $this->encontrarContainer($nome);
         if (! $container) {
-            throw new Exception('Container não encontrado: '.$this->containerName);
+            if ($acao === 'stop') {
+                return;
+            }
+            throw new Exception('Container não encontrado: '.$nome);
         }
 
-        $response = $this->request('POST', "/api/endpoints/{$this->endpointId}/docker/containers/{$container['Id']}/start");
+        $path = $acao === 'start'
+            ? "/api/endpoints/{$this->endpointId}/docker/containers/{$container['Id']}/start"
+            : "/api/endpoints/{$this->endpointId}/docker/containers/{$container['Id']}/stop?t=10";
+
+        $response = $this->request('POST', $path);
         if ($response['status'] >= 400 && $response['status'] !== 304) {
-            throw new Exception('Falha ao iniciar: HTTP '.$response['status'].' '.$response['body']);
+            throw new Exception('Falha ao '.$acao.': HTTP '.$response['status'].' '.$response['body']);
         }
-
-        return $this->status();
     }
 
-    public function stop(): array
+    protected function logsUm(string $nome, int $tail): string
     {
         if (config('robo.usar_docker_cli')) {
-            return $this->execDockerCli('stop');
+            $escaped = escapeshellarg($nome);
+            $tail = max(10, min(200, $tail));
+            $saida = (string) shell_exec("timeout 2s docker logs --tail {$tail} {$escaped} 2>&1");
+            if ($saida === '') {
+                return "(sem saída / timeout ao ler logs de {$nome})";
+            }
+
+            return $saida;
         }
 
-        $container = $this->encontrarContainer();
+        $container = $this->encontrarContainer($nome);
         if (! $container) {
-            throw new Exception('Container não encontrado: '.$this->containerName);
-        }
-
-        $response = $this->request('POST', "/api/endpoints/{$this->endpointId}/docker/containers/{$container['Id']}/stop?t=10");
-        if ($response['status'] >= 400 && $response['status'] !== 304) {
-            throw new Exception('Falha ao parar: HTTP '.$response['status'].' '.$response['body']);
-        }
-
-        return $this->status();
-    }
-
-    public function logs(int $tail = 200): string
-    {
-        if (config('robo.usar_docker_cli')) {
-            return $this->logsDockerCli($tail);
-        }
-
-        $container = $this->encontrarContainer();
-        if (! $container) {
-            return "Container não encontrado: {$this->containerName}\n";
+            return "Container não encontrado: {$nome}\n";
         }
 
         $query = http_build_query([
@@ -115,7 +252,7 @@ class RoboPortainerService
         return $this->limparLogsDocker($response['body']);
     }
 
-    protected function encontrarContainer(): ?array
+    protected function encontrarContainer(string $nome): ?array
     {
         $this->garantirConfig();
 
@@ -131,7 +268,7 @@ class RoboPortainerService
 
         foreach ($containers as $container) {
             foreach ($container['Names'] ?? [] as $name) {
-                if (trim($name, '/') === trim($this->containerName, '/')) {
+                if (trim($name, '/') === trim($nome, '/')) {
                     return $container;
                 }
             }
@@ -196,36 +333,5 @@ class RoboPortainerService
         }
 
         return $saida !== '' ? $saida : $raw;
-    }
-
-    protected function statusDockerCli(): array
-    {
-        $nome = escapeshellarg($this->containerName);
-        $estado = trim((string) shell_exec("docker inspect -f '{{.State.Status}}' {$nome} 2>/dev/null"));
-        $running = $estado === 'running';
-
-        return [
-            'running' => $running,
-            'status' => $estado !== '' ? $estado : 'unknown',
-            'name' => $this->containerName,
-            'message' => $running ? 'Robô em execução' : 'Robô parado',
-        ];
-    }
-
-    protected function execDockerCli(string $acao): array
-    {
-        $nome = escapeshellarg($this->containerName);
-        $acao = $acao === 'start' ? 'start' : 'stop';
-        shell_exec("docker {$acao} {$nome} 2>&1");
-
-        return $this->statusDockerCli();
-    }
-
-    protected function logsDockerCli(int $tail): string
-    {
-        $nome = escapeshellarg($this->containerName);
-        $tail = (int) $tail;
-
-        return (string) shell_exec("docker logs --tail {$tail} {$nome} 2>&1");
     }
 }

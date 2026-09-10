@@ -4,8 +4,19 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>@yield('title', 'Painel') — {{ config('app.name') }}</title>
+    <title>@yield('title', 'Painel') — {{ $branding['nome'] ?? config('app.name') }}</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <style>
+        :root {
+            --accent: {{ $branding['cor_primaria'] ?? '#0d7a6f' }};
+            --accent-hover: {{ $branding['cor_accent'] ?? '#0a635a' }};
+            --accent-soft: {{ $branding['cor_soft'] ?? '#d8f0ec' }};
+        }
+        .bg-brand { background-color: var(--accent) !important; }
+        .text-brand { color: var(--accent) !important; }
+        .bg-brand-soft { background-color: var(--accent-soft) !important; }
+    </style>
+    @stack('styles')
 </head>
 <body class="bg-paper text-ink min-h-screen">
 @php
@@ -34,6 +45,16 @@
         ],
     ];
 
+    if (auth()->user()?->is_super_admin) {
+        $navGroups[] = [
+            'label' => 'Super admin',
+            'items' => [
+                ['route' => 'admin.clientes.index', 'match' => 'admin.clientes.*', 'label' => 'Clientes', 'icon' => 'building'],
+                ['route' => 'admin.usuarios.index', 'match' => 'admin.usuarios.*', 'label' => 'Usuários', 'icon' => 'users'],
+            ],
+        ];
+    }
+
     $iconSvg = function (string $name): string {
         return match ($name) {
             'home' => '<path stroke-linecap="round" stroke-linejoin="round" d="M3 10.5 12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1v-10.5Z"/>',
@@ -43,9 +64,17 @@
             'settings' => '<path stroke-linecap="round" stroke-linejoin="round" d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm7.4-3.5.5-1.2-1.7-1.5.2-1.9-1.9-.5-1-1.7-1.9.3L12 3l-1.1 1.5-1.9-.3-1 1.7-1.9.5.2 1.9-1.7 1.5.5 1.2-.5 1.2 1.7 1.5-.2 1.9 1.9.5 1 1.7 1.9-.3L12 21l1.1-1.5 1.9.3 1-1.7 1.9-.5-.2-1.9 1.7-1.5-.5-1.2Z"/>',
             'check' => '<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.5 11 14.5 15.5 10M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>',
             'file' => '<path stroke-linecap="round" stroke-linejoin="round" d="M8 3h6l4 4v14a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Zm6 0v4h4"/>',
+            'building' => '<path stroke-linecap="round" stroke-linejoin="round" d="M4 21V5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v16M9 21V9m0 0h8a1 1 0 0 1 1 1v11M9 9H4"/>',
+            'users' => '<path stroke-linecap="round" stroke-linejoin="round" d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m8-10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm10 10v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
             default => '',
         };
     };
+
+    $nomeMarca = $branding['nome'] ?? 'Painel';
+    $subtituloMarca = $branding['subtitulo'] ?? 'Painel do robô';
+    $clientesSwitch = auth()->user()?->is_super_admin
+        ? \App\Models\Cliente::query()->where('ativo', true)->orderBy('nome')->get()
+        : collect();
 @endphp
 
 <div class="min-h-screen md:flex">
@@ -53,7 +82,7 @@
     <aside class="hidden md:flex md:w-72 md:flex-col bg-ink text-white relative overflow-hidden">
         <div class="absolute inset-0 opacity-40 pointer-events-none"
              style="background:
-                radial-gradient(circle at 20% 10%, rgba(13,122,111,.45), transparent 40%),
+                radial-gradient(circle at 20% 10%, color-mix(in srgb, var(--accent) 55%, transparent), transparent 40%),
                 radial-gradient(circle at 90% 80%, rgba(36,54,66,.8), transparent 35%);"></div>
 
         <div class="relative px-5 py-6 border-b border-white/10">
@@ -64,10 +93,24 @@
                     </svg>
                 </div>
                 <div>
-                    <div class="font-display text-xl leading-none">MadeForte</div>
-                    <div class="text-xs text-slate-300 mt-1">Painel do robô</div>
+                    <div class="font-display text-xl leading-none">{{ $nomeMarca }}</div>
+                    <div class="text-xs text-slate-300 mt-1">{{ $subtituloMarca }}</div>
                 </div>
             </div>
+            @if ($clientesSwitch->count() > 1)
+                <form method="POST" action="{{ route('admin.clientes.selecionar', $clienteAtual ?? $clientesSwitch->first()) }}" class="mt-4" id="form-switch-cliente">
+                    @csrf
+                    <label class="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">Cliente ativo</label>
+                    <select name="cliente_switch" class="mt-1 w-full rounded-xl border-0 bg-white/10 text-sm text-white focus:ring-2 focus:ring-[var(--accent)]"
+                            onchange="trocarCliente(this.value)">
+                        @foreach ($clientesSwitch as $opcaoCliente)
+                            <option value="{{ $opcaoCliente->id }}" @selected(($clienteAtual?->id ?? null) === $opcaoCliente->id)>
+                                {{ $opcaoCliente->nome }}
+                            </option>
+                        @endforeach
+                    </select>
+                </form>
+            @endif
         </div>
 
         <nav class="relative flex-1 px-3 py-5 space-y-5 overflow-y-auto">
@@ -91,6 +134,9 @@
             <div class="rounded-2xl bg-white/5 px-3 py-3">
                 <div class="text-sm font-semibold truncate">{{ auth()->user()->name }}</div>
                 <div class="text-xs text-slate-400 truncate">{{ auth()->user()->email }}</div>
+                @if (auth()->user()->is_super_admin)
+                    <div class="text-[11px] text-[var(--accent-soft)] mt-1 font-semibold">Super admin</div>
+                @endif
                 <form method="POST" action="{{ route('logout') }}" class="mt-3">
                     @csrf
                     <button type="submit" class="btn-ghost !text-slate-300 hover:!text-white hover:!bg-white/10 w-full !justify-start !px-2">Sair da conta</button>
@@ -106,7 +152,7 @@
                 <button type="button" id="menu-open" class="btn-secondary !px-3" aria-label="Abrir menu">
                     <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" d="M4 7h16M4 12h16M4 17h16"/></svg>
                 </button>
-                <div class="font-display text-lg">MadeForte</div>
+                <div class="font-display text-lg">{{ $nomeMarca }}</div>
                 <form method="POST" action="{{ route('logout') }}">@csrf<button class="text-sm font-semibold text-brand">Sair</button></form>
             </div>
         </header>
@@ -169,6 +215,20 @@
     openBtn?.addEventListener('click', open);
     closeBtn?.addEventListener('click', close);
     backdrop?.addEventListener('click', close);
+
+    function trocarCliente(clienteId) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = @json(url('/admin/clientes')) + '/' + clienteId + '/selecionar';
+        const csrf = document.createElement('input');
+        csrf.type = 'hidden';
+        csrf.name = '_token';
+        csrf.value = document.querySelector('meta[name="csrf-token"]').content;
+        form.appendChild(csrf);
+        document.body.appendChild(form);
+        form.submit();
+    }
 </script>
+@stack('scripts')
 </body>
 </html>

@@ -21,6 +21,19 @@
   --ok-soft: #ecfdf3;
 }
 
+/* Branding dinâmico por cliente (sobrescreve Tailwind estático) */
+.bg-brand { background-color: var(--accent) !important; }
+.text-brand { color: var(--accent) !important; }
+.text-brand-soft { color: var(--accent-soft) !important; }
+.bg-brand-soft { background-color: var(--accent-soft) !important; }
+.focus\:ring-brand:focus,
+.focus\:ring-brand:focus-visible {
+  --tw-ring-color: var(--accent) !important;
+}
+.hover\:bg-brand-hover:hover {
+  background-color: var(--accent-hover) !important;
+}
+
 @layer base {
   html {
     @apply antialiased;
@@ -212,5 +225,100 @@
     border-radius: 9999px;
     background: radial-gradient(circle, var(--accent-soft), transparent 70%);
     pointer-events: none;
+  }
+
+  .etapa-pill {
+    @apply inline-flex items-center rounded-lg px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide;
+  }
+
+  .etapa-parado { color: #5b6f7c; background: var(--mist); }
+  .etapa-login { color: #1d4ed8; background: #eff6ff; }
+  .etapa-busca { color: var(--accent-hover); background: var(--accent-soft); }
+  .etapa-filtro { color: #6d28d9; background: #f5f3ff; }
+  .etapa-detalhe { color: #9a3412; background: #fff7ed; }
+  .etapa-vinculo { color: var(--ok); background: var(--ok-soft); }
+  .etapa-erro { color: var(--danger); background: var(--danger-soft); }
+  .etapa-info { color: var(--ink-soft); background: var(--mist); }
+
+  .slot-card {
+    @apply rounded-xl border px-3 py-3 transition;
+    border-color: var(--line);
+    background: #fff;
+  }
+
+  .slot-card.is-on {
+    border-color: #abefc6;
+    background: var(--ok-soft);
+  }
+
+  .slot-card.is-off {
+    opacity: 0.72;
+  }
+
+  .slot-dot {
+    @apply inline-block h-2 w-2 rounded-full;
+  }
+
+  .slot-dot.is-on {
+    background: var(--ok);
+    box-shadow: 0 0 0 3px rgba(6, 118, 71, 0.18);
+  }
+
+  .slot-dot.is-off {
+    background: #94a3b8;
+  }
+
+  .qty-option {
+    @apply flex-1 rounded-xl border px-3 py-2.5 text-center text-sm font-bold transition cursor-pointer;
+    border-color: var(--line);
+    background: #fff;
+  }
+
+  .qty-option:has(input:checked) {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent-hover);
+    box-shadow: 0 0 0 3px rgba(13, 122, 111, 0.12);
+  }
+
+  .qty-option input {
+    @apply sr-only;
+  }
+
+  .timeline-item {
+    @apply relative pl-5 py-3;
+  }
+
+  .timeline-item::before {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 1.15rem;
+    width: 7px;
+    height: 7px;
+    border-radius: 9999px;
+    background: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+
+  .timeline-rail {
+    @apply relative;
+  }
+
+  .timeline-rail::before {
+    content: '';
+    position: absolute;
+    left: 8px;
+    top: 0.5rem;
+    bottom: 0.5rem;
+    width: 1px;
+    background: var(--line);
+  }
+
+  .robo-hero {
+    @apply panel overflow-hidden;
+    background:
+      linear-gradient(135deg, rgba(216, 240, 236, 0.55), rgba(255, 255, 255, 0.95) 42%),
+      #fff;
   }
 }

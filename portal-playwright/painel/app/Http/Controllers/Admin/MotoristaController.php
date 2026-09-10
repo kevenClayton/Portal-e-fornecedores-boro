@@ -93,25 +93,48 @@ class MotoristaController extends Controller
 
     public function gerenciar(): View
     {
-        $motoristas = Motorista::query()
+        $motoristasAtivos = Motorista::query()
+            ->where('situacao', true)
             ->orderBy('ordem_motorista')
             ->orderBy('nome')
             ->get();
 
-        return view('admin.motoristas.gerenciar', compact('motoristas'));
+        $motoristasInativos = Motorista::query()
+            ->where('situacao', false)
+            ->orderBy('ordem_motorista')
+            ->orderBy('nome')
+            ->get();
+
+        return view('admin.motoristas.gerenciar', compact('motoristasAtivos', 'motoristasInativos'));
     }
 
-    public function reordenar(Request $request): RedirectResponse
+    public function reordenar(Request $request)
     {
-        $ordens = $request->input('ordem', []);
-        if (! is_array($ordens)) {
-            return back()->with('error', 'Ordem inválida.');
+        $dados = $request->validate([
+            'motoristasAtivos' => ['nullable', 'array'],
+            'motoristasAtivos.*.id' => ['required', 'integer'],
+            'motoristasAtivos.*.ordem' => ['required', 'integer', 'min:1'],
+            'motoristasInativos' => ['nullable', 'array'],
+            'motoristasInativos.*.id' => ['required', 'integer'],
+            'motoristasInativos.*.ordem' => ['required', 'integer', 'min:1'],
+        ]);
+
+        foreach ($dados['motoristasAtivos'] ?? [] as $item) {
+            Motorista::query()->whereKey($item['id'])->update([
+                'situacao' => true,
+                'ordem_motorista' => (int) $item['ordem'],
+            ]);
         }
 
-        foreach ($ordens as $id => $ordem) {
-            Motorista::query()->whereKey($id)->update([
-                'ordem_motorista' => (int) $ordem,
+        foreach ($dados['motoristasInativos'] ?? [] as $item) {
+            Motorista::query()->whereKey($item['id'])->update([
+                'situacao' => false,
+                'ordem_motorista' => (int) $item['ordem'],
             ]);
+        }
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json(['ok' => true, 'message' => 'Lista atualizada com sucesso']);
         }
 
         return back()->with('success', 'Ordem atualizada.');

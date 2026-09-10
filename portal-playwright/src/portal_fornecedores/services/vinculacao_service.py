@@ -1,17 +1,18 @@
 import logging
-from typing import Callable, Optional
+from typing import Callable, Optional, Set
 
 from portal_fornecedores.browser.pages.cargas_page import CargasPage
 from portal_fornecedores.browser.pages.detalhes_carga_page import DetalhesCargaPage
 from portal_fornecedores.browser.pages.vinculacao_page import VinculacaoPage
+from portal_fornecedores.config.settings import get_settings
 from portal_fornecedores.database.repositories.dados_repository import DadosRepository
 from portal_fornecedores.models.entidades import (
-  ConfiguracaoBusca,
   DadosMotorista,
   DadosRota,
   ParametrosOperacao,
 )
 from portal_fornecedores.services.email_service import EmailService
+from portal_fornecedores.services.whatsapp_service import WhatsAppService
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class VinculacaoService:
     email_service: EmailService,
     parametros: ParametrosOperacao,
     on_status: Optional[Callable[[str], None]] = None,
+    whatsapp_service: Optional[WhatsAppService] = None,
   ):
     self._cargas = cargas_page
     self._detalhes = detalhes_page
@@ -33,7 +35,9 @@ class VinculacaoService:
     self._repo = repository
     self._email = email_service
     self._parametros = parametros
+    self._whatsapp = whatsapp_service or WhatsAppService()
     self._on_status = on_status or (lambda msg: None)
+    self._docs_notificados: Set[str] = set()
 
   def tentar_vincular(
     self,
@@ -100,7 +104,9 @@ class VinculacaoService:
     mensagem, observacao = self._vinculacao.salvar()
 
     if "CHAPA EXCEDENTE" in observacao:
-      self.registrar_incompativel(rota, destino, "Chapa excedente ao vincular")
+      self.registrar_incompativel(
+        rota, destino, "Chapa excedente ao vincular", motorista=motorista
+      )
       self._email.notificar_generico(
         self._parametros.email_notificacao,
         "Chapa excedente",
@@ -112,7 +118,7 @@ class VinculacaoService:
       self._registrar_sucesso(motorista, rota, destino)
       return True
 
-    self.registrar_incompativel(rota, destino, mensagem)
+    self.registrar_incompativel(rota, destino, mensagem or "Erro ao vincular", motorista=motorista)
     self._email.notificar_generico(
       self._parametros.email_notificacao,
       "Erro ao tentar vincular",
@@ -130,14 +136,91 @@ class VinculacaoService:
     self._email.notificar_rota_vinculada(
       self._parametros.email_notificacao, motorista, rota.numero_documento,
     )
+    self._notificar_whatsapp(
+      situacao="aceita",
+      rota=rota,
+      destino=destino,
+      motivo="",
+      motorista=motorista,
+    )
 
-  def registrar_incompativel(self, rota: DadosRota, destino: str, motivo: str) -> None:
+  def registrar_incompativel(
+    self,
+    rota: DadosRota,
+    destino: str,
+    motivo: str,
+    motorista: Optional[DadosMotorista] = None,
+  ) -> None:
     self._repo.gravar_relatorio(
       rota.planta_origem, destino, rota.numero_documento, rota.data,
       rota.valor_carga, rota.tipo_transporte, rota.peso_total,
       rota.observacoes, rota.prioridade, rota.clientes_mesmo_destino,
       rota.mais_de_um_destino, motivo,
     )
+    self._notificar_whatsapp(
+      situacao="perdida",
+      rota=rota,
+      destino=destino,
+      motivo=motivo,
+      motorista=motorista,
+    )
+
+  def _notificar_whatsapp(
+    self,
+    situacao: str,
+    rota: DadosRota,
+    destino: str,
+    motivo: str = "",
+    motorista: Optional[DadosMotorista] = None,
+  ) -> None:
+    chave = f"{situacao}:{rota.numero_documento}"
+    if chave in self._docs_notificados:
+      return
+    self._docs_notificados.add(chave)
+
+    nome_motorista = motorista.nome if motorista else ""
+    placa = motorista.placa if motorista else ""
+    cpf = motorista.cpf if motorista else ""
+
+    try:
+      public_id = self._repo.gravar_notificacao_carga(
+        situacao=situacao,
+        numero_documento=rota.numero_documento,
+        motorista=nome_motorista,
+        motivo=motivo,
+        origem=rota.planta_origem,
+        destino=destino or rota.cluster,
+        valor_carga=str(rota.valor_carga or ""),
+        tipo_transporte=rota.tipo_transporte,
+        placa=placa,
+        cpf=cpf,
+      )
+    except Exception as erro:
+      logger.error("Falha ao gravar notificacao_carga: %s", erro)
+      return
+
+    settings = get_settings()
+    base_url = (
+      (self._parametros.painel_url_publica or "").rstrip("/")
+      or (settings.painel_url_publica or "").rstrip("/")
+    )
+    if not base_url:
+      logger.warning("WhatsApp: painel_url_publica vazio — sem link de detalhes")
+      return
+
+    url_detalhes = f"{base_url}/carga/{public_id}"
+    telefones = self._whatsapp.telefones_validos(self._parametros.whatsapp_telefones)
+
+    self._whatsapp.notificar_carga(
+      telefones=telefones,
+      situacao=situacao,
+      motorista=nome_motorista or "-",
+      numero_documento=rota.numero_documento,
+      url_detalhes=url_detalhes,
+      motivo=motivo,
+      codigo_estabelecimento=self._parametros.whatsapp_codigo_estabelecimento or 9,
+    )
+    self._status(f"WhatsApp {situacao}: doc {rota.numero_documento} → {url_detalhes}")
 
   def _status(self, mensagem: str) -> None:
     logger.info(mensagem)
