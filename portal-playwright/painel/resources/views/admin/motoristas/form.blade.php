@@ -6,15 +6,24 @@
 <style>
     .form-section-title { font-family: 'Source Serif 4', Georgia, serif; font-size: 1.25rem; font-weight: 700; color: var(--ink); }
     .check-grid { display: grid; gap: 0.5rem; max-height: 16rem; overflow: auto; padding: 0.75rem; border: 1px solid var(--line); border-radius: 0.9rem; background: #fafcfd; }
-    .check-grid.tall { max-height: 22rem; }
+    .check-grid.tall { max-height: 28rem; }
+    .check-grid.destinos-grid { grid-template-columns: 1fr; }
+    @media (min-width: 640px) { .check-grid.destinos-grid { grid-template-columns: 1fr 1fr; } }
     .check-item { display: flex; align-items: flex-start; gap: 0.65rem; padding: 0.55rem 0.65rem; border-radius: 0.65rem; cursor: pointer; transition: .12s ease; }
     .check-item:hover { background: var(--accent-soft); }
+    .check-item.is-checked { background: rgba(13, 122, 111, 0.08); }
+    .check-item.is-hidden { display: none !important; }
     .check-item input { margin-top: 0.15rem; border-radius: 0.3rem; border-color: var(--line); color: var(--accent); }
     .check-item span { font-size: 0.875rem; font-weight: 600; line-height: 1.35; color: var(--ink); }
     .toggle-chip { display: inline-flex; align-items: center; gap: 0.55rem; padding: 0.7rem 0.9rem; border: 1px solid var(--line); border-radius: 0.85rem; background: #fff; font-size: 0.875rem; font-weight: 700; cursor: pointer; }
     .toggle-chip:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-hover); }
     .sticky-actions { position: sticky; bottom: 0; z-index: 20; background: rgba(247, 250, 251, 0.92); backdrop-filter: blur(8px); border-top: 1px solid var(--line); margin: 1.5rem -1rem -1rem; padding: 1rem; }
     @media (min-width: 768px) { .sticky-actions { margin-left: 0; margin-right: 0; border-radius: 1rem; } }
+    .destinos-toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+    .destinos-toolbar .btn-mini { border: 1px solid var(--line); background: #fff; border-radius: 0.65rem; padding: 0.45rem 0.75rem; font-size: 0.75rem; font-weight: 700; color: var(--ink-soft); cursor: pointer; }
+    .destinos-toolbar .btn-mini:hover { border-color: var(--accent); color: var(--accent-hover); background: var(--accent-soft); }
+    .destinos-toolbar .btn-mini.is-active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-hover); }
+    .destinos-meta { font-size: 0.75rem; color: #5b6f7c; font-weight: 600; }
 </style>
 @endpush
 
@@ -68,6 +77,10 @@
                     <label class="field-label" for="cpf">CPF</label>
                     <input id="cpf" name="cpf" value="{{ old('cpf', $motorista->cpf) }}" required class="field-input" placeholder="000.000.000-00" inputmode="numeric">
                 </div>
+                <div>
+                    <label class="field-label" for="celular">Celular</label>
+                    <input id="celular" name="celular" value="{{ old('celular', $motorista->celular ?? '') }}" class="field-input" placeholder="Opcional" inputmode="tel">
+                </div>
 
                 <div class="grid grid-cols-2 gap-3">
                     <div>
@@ -107,7 +120,11 @@
                         </div>
                         <span class="badge-muted" id="count-origens">0 selecionadas</span>
                     </div>
-                    <div class="check-grid" data-count-target="count-origens">
+                    <div class="destinos-toolbar" data-check-actions="lista-origens">
+                        <button type="button" class="btn-mini" data-action="select-all">Selecionar todos</button>
+                        <button type="button" class="btn-mini" data-action="clear-all">Limpar seleção</button>
+                    </div>
+                    <div class="check-grid" id="lista-origens" data-count-target="count-origens">
                         @forelse ($origens as $origem)
                             <label class="check-item">
                                 <input type="checkbox" name="origens[]" value="{{ $origem->id }}"
@@ -120,16 +137,27 @@
                     </div>
                 </section>
 
-                <section class="panel-pad space-y-4">
+                <section class="panel-pad space-y-4" id="secao-destinos">
                     <div class="flex flex-wrap items-end justify-between gap-3">
                         <div>
                             <h2 class="form-section-title">Destinos</h2>
-                            <p class="text-sm text-slate-500 mt-1">Clusters exatamente como no portal.</p>
+                            <p class="text-sm text-slate-500 mt-1">Busque e marque em lote — útil com muitos clusters.</p>
                         </div>
                         <span class="badge-muted" id="count-destinos">0 selecionados</span>
                     </div>
-                    <input type="search" id="filtro-destinos" class="field-input" placeholder="Filtrar destinos…">
-                    <div class="check-grid tall" id="lista-destinos" data-count-target="count-destinos">
+
+                    <div class="destinos-toolbar">
+                        <button type="button" class="btn-mini" id="btn-destinos-todos" title="Marca todos os destinos cadastrados">Selecionar todos</button>
+                        <button type="button" class="btn-mini" id="btn-destinos-filtrados" title="Marca só o que está visível no filtro">Selecionar filtrados</button>
+                        <button type="button" class="btn-mini" id="btn-destinos-limpar-filtrados" title="Desmarca só o que está visível">Limpar filtrados</button>
+                        <button type="button" class="btn-mini" id="btn-destinos-limpar" title="Desmarca tudo">Limpar seleção</button>
+                        <button type="button" class="btn-mini" id="btn-destinos-so-marcados" data-mode="all">Ver só selecionados</button>
+                    </div>
+
+                    <input type="search" id="filtro-destinos" class="field-input" placeholder="Filtrar destinos… (ex.: SP, Contagem, 35)" autocomplete="off">
+                    <p class="destinos-meta" id="meta-destinos">—</p>
+
+                    <div class="check-grid tall destinos-grid" id="lista-destinos" data-count-target="count-destinos">
                         @forelse ($destinos as $destino)
                             <label class="check-item" data-filter-text="{{ mb_strtolower($destino->nome_destino) }}">
                                 <input type="checkbox" name="destinos[]" value="{{ $destino->id }}"
@@ -151,7 +179,11 @@
                             </div>
                             <span class="badge-muted" id="count-tipos">0</span>
                         </div>
-                        <div class="check-grid" data-count-target="count-tipos">
+                        <div class="destinos-toolbar" data-check-actions="lista-tipos">
+                            <button type="button" class="btn-mini" data-action="select-all">Selecionar todos</button>
+                            <button type="button" class="btn-mini" data-action="clear-all">Limpar seleção</button>
+                        </div>
+                        <div class="check-grid" id="lista-tipos" data-count-target="count-tipos">
                             @foreach ($tipos as $tipo)
                                 <label class="check-item">
                                     <input type="checkbox" name="tipos_veiculo[]" value="{{ $tipo->id }}"
@@ -170,7 +202,11 @@
                             </div>
                             <span class="badge-muted" id="count-carreta">0</span>
                         </div>
-                        <div class="check-grid" data-count-target="count-carreta">
+                        <div class="destinos-toolbar" data-check-actions="lista-carreta">
+                            <button type="button" class="btn-mini" data-action="select-all">Selecionar todos</button>
+                            <button type="button" class="btn-mini" data-action="clear-all">Limpar seleção</button>
+                        </div>
+                        <div class="check-grid" id="lista-carreta" data-count-target="count-carreta">
                             @foreach ($tipos as $tipo)
                                 <label class="check-item">
                                     <input type="checkbox" name="tipos_veiculo_carreta[]" value="{{ $tipo->id }}"
@@ -214,18 +250,122 @@
 
     document.querySelectorAll('[data-count-target]').forEach((container) => {
         atualizarContagem(container);
-        container.addEventListener('change', () => atualizarContagem(container));
+        container.addEventListener('change', (evento) => {
+            const item = evento.target.closest('.check-item');
+            if (item && evento.target.matches('input[type="checkbox"]')) {
+                item.classList.toggle('is-checked', evento.target.checked);
+            }
+            atualizarContagem(container);
+            if (container.id === 'lista-destinos') atualizarMetaDestinos();
+        });
+    });
+
+    document.querySelectorAll('[data-check-actions]').forEach((toolbar) => {
+        const listaId = toolbar.dataset.checkActions;
+        const listaAlvo = document.getElementById(listaId);
+        if (!listaAlvo) return;
+
+        toolbar.addEventListener('click', (evento) => {
+            const botao = evento.target.closest('[data-action]');
+            if (!botao) return;
+            const acao = botao.dataset.action;
+            const itens = Array.from(listaAlvo.querySelectorAll('.check-item'));
+            const marcado = acao === 'select-all';
+            if (acao !== 'select-all' && acao !== 'clear-all') return;
+            itens.forEach((item) => {
+                const checkbox = item.querySelector('input[type="checkbox"]');
+                if (!checkbox || checkbox.checked === marcado) return;
+                checkbox.checked = marcado;
+                item.classList.toggle('is-checked', marcado);
+            });
+            atualizarContagem(listaAlvo);
+        });
     });
 
     const filtro = document.getElementById('filtro-destinos');
     const lista = document.getElementById('lista-destinos');
-    filtro?.addEventListener('input', () => {
-        const termo = filtro.value.trim().toLowerCase();
-        lista?.querySelectorAll('[data-filter-text]').forEach((item) => {
-            const texto = item.dataset.filterText || '';
-            item.style.display = !termo || texto.includes(termo) ? '' : 'none';
+    const meta = document.getElementById('meta-destinos');
+    const btnTodos = document.getElementById('btn-destinos-todos');
+    const btnFiltrados = document.getElementById('btn-destinos-filtrados');
+    const btnLimparFiltrados = document.getElementById('btn-destinos-limpar-filtrados');
+    const btnLimpar = document.getElementById('btn-destinos-limpar');
+    const btnSoMarcados = document.getElementById('btn-destinos-so-marcados');
+
+    let mostrarSoSelecionados = false;
+
+    function itensDestino() {
+        return Array.from(lista?.querySelectorAll('[data-filter-text]') || []);
+    }
+
+    function termoFiltro() {
+        return (filtro?.value || '').trim().toLowerCase();
+    }
+
+    function passaNoFiltro(item, termo) {
+        if (!termo) return true;
+        const texto = item.dataset.filterText || '';
+        return termo.split(/\s+/).every((parte) => texto.includes(parte));
+    }
+
+    function aplicarVisibilidade() {
+        const termo = termoFiltro();
+        let visiveis = 0;
+        itensDestino().forEach((item) => {
+            const checkbox = item.querySelector('input[type="checkbox"]');
+            const bateFiltro = passaNoFiltro(item, termo);
+            const bateModo = !mostrarSoSelecionados || Boolean(checkbox?.checked);
+            const mostrar = bateFiltro && bateModo;
+            item.classList.toggle('is-hidden', !mostrar);
+            if (mostrar) visiveis += 1;
+            if (checkbox) item.classList.toggle('is-checked', checkbox.checked);
         });
+        atualizarMetaDestinos(visiveis);
+    }
+
+    function atualizarMetaDestinos(visiveisCalc) {
+        if (!meta || !lista) return;
+        const itens = itensDestino();
+        const total = itens.length;
+        const selecionados = itens.filter((item) => item.querySelector('input[type="checkbox"]')?.checked).length;
+        const visiveis = visiveisCalc ?? itens.filter((item) => !item.classList.contains('is-hidden')).length;
+        const termo = termoFiltro();
+        meta.textContent = termo
+            ? `${visiveis} visíveis de ${total} · ${selecionados} selecionados`
+            : `${total} destinos · ${selecionados} selecionados`;
+        atualizarContagem(lista);
+    }
+
+    function marcarItens(itens, marcado) {
+        itens.forEach((item) => {
+            const checkbox = item.querySelector('input[type="checkbox"]');
+            if (!checkbox || checkbox.checked === marcado) return;
+            checkbox.checked = marcado;
+            item.classList.toggle('is-checked', marcado);
+        });
+        if (lista) atualizarContagem(lista);
+        aplicarVisibilidade();
+    }
+
+    filtro?.addEventListener('input', aplicarVisibilidade);
+
+    btnTodos?.addEventListener('click', () => marcarItens(itensDestino(), true));
+    btnFiltrados?.addEventListener('click', () => {
+        const visiveis = itensDestino().filter((item) => !item.classList.contains('is-hidden'));
+        marcarItens(visiveis, true);
     });
+    btnLimparFiltrados?.addEventListener('click', () => {
+        const visiveis = itensDestino().filter((item) => !item.classList.contains('is-hidden'));
+        marcarItens(visiveis, false);
+    });
+    btnLimpar?.addEventListener('click', () => marcarItens(itensDestino(), false));
+    btnSoMarcados?.addEventListener('click', () => {
+        mostrarSoSelecionados = !mostrarSoSelecionados;
+        btnSoMarcados.classList.toggle('is-active', mostrarSoSelecionados);
+        btnSoMarcados.textContent = mostrarSoSelecionados ? 'Ver todos' : 'Ver só selecionados';
+        aplicarVisibilidade();
+    });
+
+    aplicarVisibilidade();
 })();
 </script>
 @endpush

@@ -9,8 +9,8 @@ from __future__ import annotations
 import argparse
 import logging
 import signal
-import sys
 import time
+from pathlib import Path
 from typing import Optional
 
 from portal_fornecedores.browser.manager import BrowserManager
@@ -20,6 +20,7 @@ from portal_fornecedores.browser.pages.login_page import LoginPage
 from portal_fornecedores.browser.pages.vinculacao_page import VinculacaoPage
 from portal_fornecedores.config.settings import get_settings
 from portal_fornecedores.database.repositories.dados_repository import DadosRepository
+from portal_fornecedores.errors import CredencialPortalInvalida
 from portal_fornecedores.models.entidades import ConfiguracaoBusca
 from portal_fornecedores.services.acompanhamento_service import AcompanhamentoService
 from portal_fornecedores.services.email_service import EmailService
@@ -29,6 +30,8 @@ from portal_fornecedores.utils.logging_config import configurar_logging
 
 logger = logging.getLogger(__name__)
 
+MAX_FALHAS_CAPTCHA = 3
+
 
 class PortalApp:
   def __init__(self, config: ConfiguracaoBusca):
@@ -36,27 +39,33 @@ class PortalApp:
     self._config = config
     self._config.robo_slot = max(1, min(3, int(self._settings.robo_slot or 1)))
     self._ativo = True
+    self._aguardando_acao_manual = False
     self._rota_service: Optional[RotaService] = None
     self._browser: Optional[BrowserManager] = None
     self._acompanhamento = AcompanhamentoService(robo_slot=self._config.robo_slot)
     self._falhas_captcha = 0
-    from pathlib import Path
     self._proxy_rotation = ProxyRotationService(
       api_token=self._settings.webshare_api_token,
       plan_id=self._settings.webshare_plan_id,
       arquivo_proxy=Path(f"/app/logs/proxy_atual_{self._config.robo_slot}.txt"),
       slot=self._config.robo_slot,
+      cliente=self._settings.cliente,
     )
-    proxy_salvo = self._proxy_rotation.carregar_proxy_salvo()
-    if proxy_salvo:
-      self._settings.proxy = proxy_salvo
-      logger.info("Usando proxy salvo (slot %s): %s", self._config.robo_slot, proxy_salvo.split(":")[0])
+    # API Webshare é a fonte; PROXY/.env só entra se a API falhar
+    proxy_resolvido = self._proxy_rotation.resolver_proxy_inicial(self._settings.proxy)
+    if proxy_resolvido:
+      self._settings.proxy = proxy_resolvido
+      print(
+        f"Proxy: {proxy_resolvido.split(':')[0]} "
+        f"(cliente={self._settings.cliente}, slot={self._config.robo_slot}, fonte=Webshare API)",
+        flush=True,
+      )
 
   def _status(self, mensagem: str) -> None:
     texto = f"[R{self._config.robo_slot}] {mensagem}"
     print(texto, flush=True)
     logger.info(texto)
-    forcar = mensagem.upper().startswith("ERRO")
+    forcar = mensagem.upper().startswith("ERRO") or "incorret" in mensagem.lower()
     try:
       self._acompanhamento.publicar(texto, forcar_screenshot=forcar)
     except Exception:
@@ -86,18 +95,38 @@ class PortalApp:
     except Exception:
       pass
 
-  def _reiniciar_browser(self, espera_seg: int = 3) -> None:
+  def _encerrar_browser(self) -> None:
     try:
       if self._browser:
         self._browser.stop()
     except Exception:
       pass
+    self._browser = None
+    self._rota_service = None
     self._acompanhamento.definir_page(None)
+
+  def _aguardar_novo_start(self, motivo: str) -> None:
+    """Para o ciclo e fica idle até o painel dar stop (SIGTERM). Evita restart loop do Docker."""
+    self._aguardando_acao_manual = True
+    self._status(motivo)
+    self._encerrar_browser()
+    try:
+      self._acompanhamento.publicar(
+        f"[R{self._config.robo_slot}] PARADO — corrija usuário/senha em Parâmetros e use Parar + Iniciar frota.",
+        forcar_screenshot=True,
+      )
+    except Exception:
+      pass
+    while self._ativo:
+      time.sleep(15)
+
+  def _reiniciar_browser(self, espera_seg: int = 3) -> None:
+    self._encerrar_browser()
     fim = time.time() + max(0, espera_seg)
     while self._ativo and time.time() < fim:
       self._heartbeat()
       time.sleep(min(2, max(0, fim - time.time())))
-    if self._ativo:
+    if self._ativo and not self._aguardando_acao_manual:
       self._rota_service = self._iniciar_browser()
 
   def parar(self, *_args) -> None:
@@ -126,9 +155,17 @@ class PortalApp:
     try:
       self._rota_service = self._iniciar_browser()
       while self._ativo:
+        if self._aguardando_acao_manual:
+          time.sleep(15)
+          continue
         try:
           self._rota_service.executar_ciclo(self._config)
           self._falhas_captcha = 0
+        except CredencialPortalInvalida as erro:
+          logger.exception("Credencial do portal invalida: %s", erro)
+          self._aguardar_novo_start(
+            f"ERRO: {erro}"
+          )
         except Exception as erro:
           mensagem = str(erro)
           logger.exception("Erro no ciclo de automacao: %s", erro)
@@ -137,15 +174,29 @@ class PortalApp:
           if not self._ativo:
             break
 
-          # Se o Chrome foi fechado, reabre e continua.
           if "has been closed" in mensagem or "TargetClosedError" in mensagem or "Browser/página fechados" in mensagem:
             self._status("Chrome fechou. Reabrindo em 3s... (não feche a janela)")
             self._reiniciar_browser(espera_seg=3)
             continue
 
-          # reCAPTCHA inválido: troca IP (Webshare) + backoff curto
           if "captcha" in mensagem.lower():
+            # Timeout de script ≠ rejeição do portal — não gasta rotação/parada por isso
+            if "nao carregou" in mensagem.lower() or "não carregou" in mensagem.lower():
+              self._status("reCAPTCHA indisponivel na pagina — repetindo ciclo em 8s...")
+              time.sleep(8)
+              continue
+
+            captcha_na_pesquisa = "pesquisar cargas" in mensagem.lower() or "filtrar cluster" in mensagem.lower()
+
+            # Após esgotar tentativas no Pesquisar, troca IP na hora (soft retry no IP queimado não ajuda)
             self._falhas_captcha += 1
+            if self._falhas_captcha >= MAX_FALHAS_CAPTCHA:
+              self._aguardar_novo_start(
+                f"ERRO: Captcha falhou {self._falhas_captcha}x. "
+                "Troque/reponha IPs ISP na Webshare e use Parar + Iniciar frota."
+              )
+              continue
+
             host_antes = (self._settings.proxy or "").split(":")[0] or "(nenhum)"
             novo_proxy = None
             try:
@@ -156,15 +207,17 @@ class PortalApp:
             if novo_proxy:
               self._settings.proxy = novo_proxy
               host_novo = novo_proxy.split(":")[0]
-              espera = min(180, 45 * self._falhas_captcha)  # 45s, 90s, 135s... máx 3min
+              espera = min(180, 45 * self._falhas_captcha)
+              origem = "Pesquisar" if captcha_na_pesquisa else "Login"
               self._status(
-                f"Captcha rejeitado no IP {host_antes}. "
-                f"Trocando para {host_novo} e aguardando {espera}s (tentativa {self._falhas_captcha})."
+                f"Captcha ({origem}) rejeitado no IP {host_antes}. "
+                f"Trocando para {host_novo} e aguardando {espera}s "
+                f"(tentativa {self._falhas_captcha}/{MAX_FALHAS_CAPTCHA})."
               )
             else:
               espera = min(900, 180 * self._falhas_captcha)
               self._status(
-                f"Captcha rejeitado (tentativa {self._falhas_captcha}). "
+                f"Captcha rejeitado (tentativa {self._falhas_captcha}/{MAX_FALHAS_CAPTCHA}). "
                 f"Sem IP novo — aguardando {espera // 60} min. Configure WEBSHARE_API_TOKEN."
               )
             self._reiniciar_browser(espera_seg=espera)
@@ -172,13 +225,12 @@ class PortalApp:
 
           time.sleep(5)
     finally:
-      if self._browser:
-        self._browser.stop()
-      self._acompanhamento.definir_page(None)
-      try:
-        self._acompanhamento.publicar("Robô encerrado", forcar_screenshot=False)
-      except Exception:
-        pass
+      self._encerrar_browser()
+      if not self._aguardando_acao_manual:
+        try:
+          self._acompanhamento.publicar("Robô encerrado", forcar_screenshot=False)
+        except Exception:
+          pass
       print("Encerrado.", flush=True)
 
 

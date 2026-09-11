@@ -276,17 +276,31 @@ class RoboController extends Controller
 
     protected function caminhoScreenshot(): ?string
     {
-        $candidatos = [
-            '/var/robo-logs/screenshots/atual.png',
-            '/var/robo-logs/screenshots/atual_1.png',
-            '/var/robo-logs/screenshots/atual_2.png',
-            '/var/robo-logs/screenshots/atual_3.png',
-            storage_path('app/robo-screenshot.png'),
+        $bases = ['/var/robo-logs'];
+        $cliente = Tenant::cliente();
+        if ($cliente?->temBancoProprio() || ($cliente?->slug === 'boro')) {
+            array_unshift($bases, '/var/robo-logs-boro');
+        }
+
+        $arquivos = [
+            'screenshots/atual.png',
+            'screenshots/atual_1.png',
+            'screenshots/atual_2.png',
+            'screenshots/atual_3.png',
         ];
-        foreach ($candidatos as $caminho) {
-            if (is_file($caminho) && filesize($caminho) > 0) {
-                return $caminho;
+
+        foreach ($bases as $base) {
+            foreach ($arquivos as $arquivo) {
+                $caminho = rtrim($base, '/').'/'.$arquivo;
+                if (is_file($caminho) && filesize($caminho) > 0) {
+                    return $caminho;
+                }
             }
+        }
+
+        $legado = storage_path('app/robo-screenshot.png');
+        if (is_file($legado) && filesize($legado) > 0) {
+            return $legado;
         }
 
         return null;

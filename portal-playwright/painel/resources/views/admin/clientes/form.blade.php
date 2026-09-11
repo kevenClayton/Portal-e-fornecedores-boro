@@ -25,7 +25,6 @@
             <div>
                 <label class="field-label">Slug</label>
                 <input name="slug" value="{{ old('slug', $cliente->slug) }}" class="field-input" placeholder="madeforte">
-                <p class="text-xs text-slate-500 mt-1">Identificador interno (a–z, 0–9, hífen).</p>
             </div>
             <div>
                 <label class="field-label">Máximo de robôs</label>
@@ -42,9 +41,37 @@
             <div class="sm:col-span-2">
                 <label class="field-label">Containers Docker (CSV)</label>
                 <input name="containers" value="{{ old('containers', $cliente->containers) }}" class="field-input"
-                       placeholder="portal-fornecedores,portal-fornecedores-2">
-                <p class="text-xs text-slate-500 mt-1">Na mesma EC2, separe containers por cliente. Ex.: MadeForte usa 1–2; outro cliente usa o 3º.</p>
+                       placeholder="portal-fornecedores,efornecedorboro1">
             </div>
+
+            <div class="sm:col-span-2 border-t border-line pt-4">
+                <h2 class="font-display text-lg">Banco de dados do cliente</h2>
+                <p class="text-sm text-slate-500 mt-1">
+                    Deixe em branco para usar o banco compartilhado do painel.
+                    Preencha se o cliente tem banco próprio (ex.: Boro).
+                </p>
+            </div>
+            <div class="sm:col-span-2">
+                <label class="field-label">Host</label>
+                <input name="db_host" value="{{ old('db_host', $cliente->db_host) }}" class="field-input" placeholder="reservaai-data....rds.amazonaws.com">
+            </div>
+            <div>
+                <label class="field-label">Porta</label>
+                <input type="number" name="db_port" value="{{ old('db_port', $cliente->db_port ?: 3306) }}" class="field-input">
+            </div>
+            <div>
+                <label class="field-label">Database</label>
+                <input name="db_database" value="{{ old('db_database', $cliente->db_database) }}" class="field-input" placeholder="boro">
+            </div>
+            <div>
+                <label class="field-label">Usuário</label>
+                <input name="db_username" value="{{ old('db_username', $cliente->db_username) }}" class="field-input" placeholder="robo" autocomplete="off">
+            </div>
+            <div>
+                <label class="field-label">Senha {{ $cliente->exists && $cliente->db_password ? '(deixe em branco para manter)' : '' }}</label>
+                <input type="password" name="db_password" class="field-input" autocomplete="new-password" placeholder="••••••••">
+            </div>
+
             <div class="sm:col-span-2">
                 <label class="inline-flex items-center gap-2 text-sm font-semibold">
                     <input type="checkbox" name="ativo" value="1" class="rounded border-line text-brand focus:ring-brand"

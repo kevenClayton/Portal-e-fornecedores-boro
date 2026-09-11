@@ -1,6 +1,7 @@
 import logging
 import random
 import re
+import time
 from typing import List, Optional
 from urllib.parse import urlparse
 
@@ -23,11 +24,15 @@ class CargasPage:
   SELECTOR_CLUSTER = "#ctlLoadedControl_ddlCluster"
   SELECTOR_FILTRAR = "#ctlLoadedControl_btnFiltrar"
   SELECTOR_TABELA = "#ctlLoadedControl_dgRight"
+  # Ciclos intermediários: reusa clusters e só Filtra (atualiza cargas nas rotas já conhecidas).
+  # A cada N segundos força Pesquisar de novo (captura cluster/carga novos no portal).
+  REUSO_PESQUISA_SEG = 180
 
   def __init__(self, page: Page, settings: Optional[Settings] = None):
     self._page = page
     self._settings = settings or get_settings()
     self._quantidade_verificacoes = 0
+    self._ultima_pesquisa_ok_em = 0.0
 
   def atualizar_page(self, page: Page) -> None:
     self._page = page
@@ -100,6 +105,144 @@ class CargasPage:
       maximo_ms = minimo_ms
     self._page.wait_for_timeout(random.randint(minimo_ms, maximo_ms))
 
+  def _cluster_visivel(self) -> bool:
+    try:
+      locator = self._page.locator(self.SELECTOR_CLUSTER)
+      return locator.count() > 0 and locator.first.is_visible(timeout=1_500)
+    except Exception:
+      return False
+
+  def _selecionar_empresa_usiminas(self, status) -> None:
+    status("Selecionando empresa Solucoes Usiminas...")
+    self._page.wait_for_selector(self.SELECTOR_EMPRESA, timeout=30_000)
+    self._pausar(700, 1400)
+    select = self._page.locator(self.SELECTOR_EMPRESA)
+    select.click()
+    self._pausar(400, 900)
+
+    valor_config = str(self._settings.empresa_usiminas_id or "85")
+    opcoes = select.locator("option")
+    valor_escolhido = None
+    label_escolhido = ""
+    preferidos = (
+      "soluções usiminas",
+      "solucoes usiminas",
+      "soluções usiminas s",
+    )
+    for index in range(opcoes.count()):
+      opcao = opcoes.nth(index)
+      label = (opcao.inner_text() or "").strip()
+      valor = opcao.get_attribute("value") or ""
+      label_norm = label.lower()
+      # Evita "Soluções em Aço..." se existir a opção curta SOLUÇÕES USIMINAS
+      if any(pref == label_norm or label_norm.startswith(pref) for pref in preferidos):
+        if "aço" in label_norm or "aco" in label_norm:
+          continue
+        valor_escolhido = valor
+        label_escolhido = label
+        break
+
+    if not valor_escolhido:
+      valor_escolhido = valor_config
+      try:
+        label_escolhido = select.locator(f"option[value='{valor_config}']").inner_text().strip()
+      except Exception:
+        label_escolhido = valor_config
+
+    logger.info("Empresa selecionada: %s (value=%s)", label_escolhido, valor_escolhido)
+    try:
+      with self._page.expect_navigation(wait_until="domcontentloaded", timeout=15_000):
+        select.select_option(value=valor_escolhido)
+    except Exception:
+      select.select_option(value=valor_escolhido)
+    self._pausar(1200, 2200)
+
+  def _fechar_overlays(self) -> None:
+    """Cookies/menus sobrepostos quebram o humanize do Cloak (pointer_events)."""
+    from portal_fornecedores.browser.pages.login_page import LoginPage
+
+    try:
+      LoginPage(self._page, self._settings).aceitar_cookies()
+    except Exception:
+      pass
+    try:
+      self._page.evaluate(
+        """() => {
+          const seletores = [
+            '#privacy-tools', '#privacytools', '.privacy-tools',
+            '#cookie-banner', '.cookie-banner', '#onetrust-banner-sdk',
+            'div[id*="cookie" i]', 'div[class*="cookie" i]',
+          ];
+          for (const seletor of seletores) {
+            document.querySelectorAll(seletor).forEach((el) => {
+              el.style.display = 'none';
+              el.style.pointerEvents = 'none';
+            });
+          }
+        }"""
+      )
+    except Exception:
+      pass
+
+  def _clicar_seguro(self, locator, timeout: int = 8_000) -> None:
+    """Clique compatível com Cloak humanize; se cobrir/falhar, usa click JS."""
+    self._fechar_overlays()
+    try:
+      locator.scroll_into_view_if_needed(timeout=timeout)
+    except Exception:
+      pass
+    try:
+      locator.click(timeout=timeout)
+      return
+    except Exception as erro:
+      mensagem = str(erro).lower()
+      if not any(
+        trecho in mensagem
+        for trecho in (
+          "pointer_events",
+          "covered",
+          "not supported",
+          "isolated-world",
+          "timeout",
+          "intercepts",
+        )
+      ):
+        raise
+      logger.warning("Clique humanizado falhou (%s) — usando click JS", erro)
+    try:
+      locator.evaluate("elemento => elemento.click()")
+    except Exception:
+      # fallback absoluto por id/css se o locator for o botão de pesquisa
+      self._page.evaluate(
+        """(seletor) => {
+          const el = document.querySelector(seletor);
+          if (el) el.click();
+        }""",
+        self.SELECTOR_PESQUISA,
+      )
+
+  def _clicar_pesquisar_nativo(self, botao_pesquisa) -> None:
+    """Deixa o onsubmit do portal gerar o reCAPTCHA (fluxo mais próximo do humano)."""
+    self._fechar_overlays()
+    try:
+      with self._page.expect_navigation(wait_until="domcontentloaded", timeout=45_000):
+        self._clicar_seguro(botao_pesquisa)
+    except PlaywrightTimeoutError:
+      self._clicar_seguro(botao_pesquisa)
+      self._page.wait_for_load_state("domcontentloaded")
+
+  def _clicar_pesquisar_com_token(self, login_helper, botao_pesquisa) -> None:
+    """Gera token manualmente e desativa onsubmit assíncrono (fallback)."""
+    self._fechar_overlays()
+    login_helper._preencher_token_recaptcha(botao_selector=self.SELECTOR_PESQUISA)
+    self._page.wait_for_timeout(random.randint(120, 280))
+    try:
+      with self._page.expect_navigation(wait_until="domcontentloaded", timeout=45_000):
+        self._clicar_seguro(botao_pesquisa)
+    except PlaywrightTimeoutError:
+      self._clicar_seguro(botao_pesquisa)
+      self._page.wait_for_load_state("domcontentloaded")
+
   def _abrir_cargas_e_pesquisar(self, status) -> None:
     """Refaz o caminho de menu que dispara a busca nova no portal."""
     from portal_fornecedores.browser.pages.login_page import LoginPage
@@ -108,17 +251,18 @@ class CargasPage:
     login_helper.aceitar_cookies()
     login_helper.contornar_aviso_navegador()
 
-    status("Selecionando empresa Solucoes Usiminas (85)...")
-    self._page.wait_for_selector(self.SELECTOR_EMPRESA, timeout=30_000)
-    self._pausar(700, 1400)
-    self._page.locator(self.SELECTOR_EMPRESA).click()
-    self._pausar(400, 900)
-    try:
-      with self._page.expect_navigation(wait_until="domcontentloaded", timeout=15_000):
-        self._page.select_option(self.SELECTOR_EMPRESA, value=self._settings.empresa_usiminas_id)
-    except Exception:
-      self._page.select_option(self.SELECTOR_EMPRESA, value=self._settings.empresa_usiminas_id)
-    self._pausar(1200, 2200)
+    # Ciclo intermediário: mantém a tela de clusters e só refiltra depois (rota_service).
+    # Evita captcha do Pesquisar a cada 15–35s; a cada REUSO_PESQUISA_SEG faz busca cheia.
+    idade = time.time() - self._ultima_pesquisa_ok_em if self._ultima_pesquisa_ok_em else 10**9
+    if self.REUSO_PESQUISA_SEG > 0 and self._cluster_visivel() and idade < self.REUSO_PESQUISA_SEG:
+      restante = int(self.REUSO_PESQUISA_SEG - idade)
+      status(
+        f"Ciclo intermediario — sem Pesquisar/captcha; "
+        f"refiltrando clusters com motorista (busca cheia em ~{restante}s)..."
+      )
+      return
+
+    self._selecionar_empresa_usiminas(status)
 
     abriu_menu = self._abrir_via_menu_servicos(status)
     if not abriu_menu:
@@ -129,23 +273,79 @@ class CargasPage:
     if "cmp=login.ascx" in urlparse(self._page.url).query:
       raise RuntimeError("Sessao expirou ao abrir cargas (voltou para login)")
 
-    status("Clicando em Pesquisar...")
-    self._page.wait_for_selector(self.SELECTOR_PESQUISA, timeout=20_000)
-    self._pausar(800, 1600)
-    botao_pesquisa = self._page.locator(self.SELECTOR_PESQUISA)
-    botao_pesquisa.hover(timeout=5_000)
-    self._pausar(300, 700)
-    try:
-      with self._page.expect_navigation(wait_until="domcontentloaded", timeout=45_000):
-        botao_pesquisa.click()
-    except PlaywrightTimeoutError:
-      botao_pesquisa.click()
-      self._page.wait_for_load_state("domcontentloaded")
-    self._pausar(1200, 2200)
+    # Após abrir o menu, se a lista já veio pronta, registra e segue para Filtrar
+    if self._cluster_visivel():
+      self._ultima_pesquisa_ok_em = time.time()
+      status("Tela de cargas ja com clusters — seguindo para filtros")
+      return
 
-    self._page.wait_for_selector(self.SELECTOR_CLUSTER, timeout=20_000)
-    status("Navegacao para cargas concluida")
-    logger.info("Navegacao para pagina de rotas concluida (pesquisa renovada via menu=%s)", abriu_menu)
+    status("Clicando em Pesquisar (busca cheia)...")
+    self._page.wait_for_selector(self.SELECTOR_PESQUISA, timeout=20_000)
+    self._pausar(1500, 2800)
+
+    max_tentativas = 3
+    ultimo_erro = ""
+    for tentativa in range(1, max_tentativas + 1):
+      if tentativa > 1:
+        status(f"Recaptcha na pesquisa falhou — nova tentativa {tentativa}/{max_tentativas} (mesmo IP)...")
+        self._pausar(4000, 7000)
+
+      botao_pesquisa = self._page.locator(self.SELECTOR_PESQUISA)
+      if botao_pesquisa.count() == 0:
+        raise RuntimeError("Botao Pesquisar sumiu da tela de cargas")
+
+      botao_pesquisa.scroll_into_view_if_needed()
+      self._pausar(500, 1000)
+
+      # Alterna: nativo (onsubmit do portal) ↔ token manual
+      if tentativa % 2 == 1:
+        logger.info("Pesquisar tentativa %s: fluxo nativo (onsubmit do portal)", tentativa)
+        self._clicar_pesquisar_nativo(botao_pesquisa)
+      else:
+        logger.info("Pesquisar tentativa %s: token manual reCAPTCHA", tentativa)
+        self._clicar_pesquisar_com_token(login_helper, botao_pesquisa)
+
+      self._pausar(1000, 1800)
+
+      mensagem_erro = self._mensagem_erro_portal()
+      if mensagem_erro and "captcha" in mensagem_erro.lower():
+        ultimo_erro = mensagem_erro
+        logger.warning(
+          "Captcha rejeitado ao pesquisar (tentativa %s/%s): %s",
+          tentativa,
+          max_tentativas,
+          mensagem_erro,
+        )
+        continue
+
+      try:
+        self._page.wait_for_selector(self.SELECTOR_CLUSTER, timeout=20_000)
+      except PlaywrightTimeoutError:
+        detalhe = mensagem_erro or self._mensagem_erro_portal() or "cluster nao apareceu apos Pesquisar"
+        if "captcha" in detalhe.lower():
+          ultimo_erro = detalhe
+          logger.warning(
+            "Cluster ausente com indício de captcha (tentativa %s/%s): %s",
+            tentativa,
+            max_tentativas,
+            detalhe,
+          )
+          continue
+        raise RuntimeError(f"Falha apos Pesquisar: {detalhe}")
+
+      self._ultima_pesquisa_ok_em = time.time()
+      status("Navegacao para cargas concluida")
+      logger.info(
+        "Navegacao para pagina de rotas concluida (menu=%s, tentativa captcha=%s)",
+        abriu_menu,
+        tentativa,
+      )
+      return
+
+    raise RuntimeError(
+      f"Captcha rejeitado ao pesquisar cargas apos {max_tentativas} tentativas "
+      f"({ultimo_erro or 'Captcha inválido'})"
+    )
 
   def _abrir_via_menu_servicos(self, status) -> bool:
     """
@@ -163,18 +363,25 @@ class CargasPage:
 
       link_servicos.scroll_into_view_if_needed()
       self._pausar(600, 1200)
+      self._fechar_overlays()
       # Pode ser dropdown (hover) ou ir para a página de Serviços
-      link_servicos.hover(timeout=5_000)
+      try:
+        link_servicos.hover(timeout=5_000)
+      except Exception:
+        pass
       self._pausar(700, 1300)
       try:
         with self._page.expect_navigation(wait_until="domcontentloaded", timeout=12_000):
-          link_servicos.click(timeout=8_000)
+          self._clicar_seguro(link_servicos, timeout=8_000)
         self._pausar(1200, 2200)
       except PlaywrightTimeoutError:
         # Sem navegação: provavelmente abriu submenu flutuante
-        link_servicos.click(timeout=8_000)
+        self._clicar_seguro(link_servicos, timeout=8_000)
         self._pausar(1000, 1800)
-        link_servicos.hover(timeout=5_000)
+        try:
+          link_servicos.hover(timeout=5_000)
+        except Exception:
+          pass
         self._pausar(800, 1500)
 
       status("Selecionando Vincular Documento de Transporte...")
@@ -288,24 +495,33 @@ class CargasPage:
     return textos
 
   def _localizar_link_menu(self, padroes: List[str], exigir_visivel: bool = True):
-    """Retorna o primeiro link que casa com algum padrão."""
+    """Retorna o primeiro link que casa com algum padrão.
+
+    Cloak humanize não aceita get_by_role / .filter() / locators encadeados —
+    usa CSS :has-text e XPath simples.
+    """
     for padrao in padroes:
-      regex = re.compile(padrao, re.IGNORECASE)
+      # remove âncoras ^$ para :has-text; mantém no xpath
+      texto_livre = padrao.strip("^$").replace("\\", "")
       candidatos = [
-        self._page.get_by_role("link", name=regex),
-        self._page.locator("a").filter(has_text=regex),
-        self._page.locator("#mnuPrincipal a").filter(has_text=regex),
-        self._page.locator("td a").filter(has_text=regex),
-        self._page.locator("span").filter(has_text=regex),
+        f'a:has-text("{texto_livre}")',
+        f'#mnuPrincipal a:has-text("{texto_livre}")',
+        f'td a:has-text("{texto_livre}")',
+        f'xpath=//a[contains(normalize-space(.), "{texto_livre}")]',
+        f'xpath=//*[@id="mnuPrincipal"]//a[contains(normalize-space(.), "{texto_livre}")]',
       ]
-      for locator in candidatos:
+      for seletor in candidatos:
         try:
+          locator = self._page.locator(seletor)
           total = locator.count()
         except Exception:
           continue
         for indice in range(total):
           item = locator.nth(indice)
           try:
+            texto = (item.inner_text(timeout=500) or "").strip()
+            if not re.search(padrao, texto, re.IGNORECASE):
+              continue
             if exigir_visivel:
               if item.is_visible(timeout=800):
                 return item
@@ -340,11 +556,45 @@ class CargasPage:
         return True
     return False
 
+  def _mensagem_erro_portal(self) -> str:
+    for seletor in ("#ctlLoadedControl_strMessage", "#ctlLoadedControl_lblMessage", ".erro", ".error"):
+      try:
+        locator = self._page.locator(seletor)
+        if locator.count() == 0:
+          continue
+        texto = (locator.first.inner_text(timeout=1_000) or "").strip()
+        if texto:
+          return texto
+      except Exception:
+        continue
+    return ""
+
   def aplicar_filtro(self) -> None:
+    """Aplica filtro do cluster. Preferência: clique nativo; token só se grecaptcha estiver pronto."""
     logger.info("Aplicando filtro de rota...")
-    self._page.locator(self.SELECTOR_FILTRAR).click()
-    self._page.wait_for_load_state("domcontentloaded")
+    from portal_fornecedores.browser.pages.login_page import LoginPage
+
+    botao = self._page.locator(self.SELECTOR_FILTRAR)
+    botao.scroll_into_view_if_needed()
+    self._pausar(300, 700)
+
+    # Filtrar nem sempre exige token; não pode derrubar o ciclo se grecaptcha sumiu
+    LoginPage(self._page, self._settings)._preencher_token_recaptcha(
+      botao_selector=self.SELECTOR_FILTRAR,
+      obrigatorio=False,
+    )
+    self._page.wait_for_timeout(200)
+    try:
+      with self._page.expect_navigation(wait_until="domcontentloaded", timeout=30_000):
+        self._clicar_seguro(botao)
+    except PlaywrightTimeoutError:
+      self._clicar_seguro(botao)
+      self._page.wait_for_load_state("domcontentloaded")
     self._page.wait_for_timeout(500)
+
+    mensagem = self._mensagem_erro_portal()
+    if mensagem and "captcha" in mensagem.lower():
+      raise RuntimeError(f"Captcha rejeitado ao filtrar cluster ({mensagem})")
 
   def extrair_rotas_tabela(self) -> List[DadosRota]:
     tabela = self._page.locator(self.SELECTOR_TABELA)

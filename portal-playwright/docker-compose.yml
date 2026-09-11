@@ -1,7 +1,8 @@
 # Stack para Portainer / docker compose
 #
-# Robôs 1..3: mesmos DB/proxy; ROBO_SLOT defasa o ciclo para não deixar furo.
-# O painel liga só a quantidade escolhida (1–3).
+# MadeForte: portal-fornecedores(-2/-3) → DB madeforte01, CLIENTE_ID=1
+# Boro: efornecedorboro1..3 → DB boro (RDS), CLIENTE_ID=0 (single-tenant)
+# O painel liga só a quantidade escolhida por cliente.
 
 x-robo-base: &robo-base
   build:
@@ -10,8 +11,6 @@ x-robo-base: &robo-base
   image: portal-fornecedores:latest
   restart: unless-stopped
   shm_size: "512mb"
-  volumes:
-    - portal_logs:/app/logs
 
 x-robo-env: &robo-env
   CLIENTE: ${CLIENTE:-madeforte}
@@ -25,6 +24,11 @@ x-robo-env: &robo-env
   PROXY: ${PROXY:-}
   WEBSHARE_API_TOKEN: ${WEBSHARE_API_TOKEN:-}
   WEBSHARE_PLAN_ID: ${WEBSHARE_PLAN_ID:-}
+  CLOAKBROWSER_LICENSE_KEY: ${CLOAKBROWSER_LICENSE_KEY:-}
+  USAR_CLOAKBROWSER: ${USAR_CLOAKBROWSER:-true}
+  CLOAK_HUMANIZE: ${CLOAK_HUMANIZE:-true}
+  CLOAK_HUMAN_PRESET: ${CLOAK_HUMAN_PRESET:-careful}
+  CLOAK_GEOIP: ${CLOAK_GEOIP:-true}
   USAR_CHROME_SISTEMA: ${USAR_CHROME_SISTEMA:-true}
   HEADLESS: ${HEADLESS:-false}
   DOCKER: "true"
@@ -38,10 +42,42 @@ x-robo-env: &robo-env
   WHATSAPP_API_TOKEN: ${WHATSAPP_API_TOKEN:-}
   PAINEL_URL_PUBLICA: ${PAINEL_URL_PUBLICA:-https://madeforte.reservaai.com.br}
 
+x-robo-boro-env: &robo-boro-env
+  CLIENTE: boro
+  CLIENTE_ID: "0"
+  DB_HOST: ${BORO_DB_HOST:-reservaai-data.cgns57eoufkz.us-east-1.rds.amazonaws.com}
+  DB_PORT: ${BORO_DB_PORT:-3306}
+  DB_USER: ${BORO_DB_USER:-robo}
+  DB_PASSWORD: ${BORO_DB_PASSWORD}
+  DB_NAME: ${BORO_DB_NAME:-boro}
+  PORTAL_URL: ${PORTAL_URL:-https://portal.e-fornecedores.ind.br/}
+  PROXY: ${PROXY_BORO:-${PROXY:-}}
+  WEBSHARE_API_TOKEN: ${WEBSHARE_API_TOKEN:-}
+  WEBSHARE_PLAN_ID: ${WEBSHARE_PLAN_ID:-}
+  CLOAKBROWSER_LICENSE_KEY: ${CLOAKBROWSER_LICENSE_KEY:-}
+  USAR_CLOAKBROWSER: ${USAR_CLOAKBROWSER:-true}
+  CLOAK_HUMANIZE: ${CLOAK_HUMANIZE:-true}
+  CLOAK_HUMAN_PRESET: ${CLOAK_HUMAN_PRESET:-careful}
+  CLOAK_GEOIP: ${CLOAK_GEOIP:-true}
+  USAR_CHROME_SISTEMA: ${USAR_CHROME_SISTEMA:-true}
+  HEADLESS: ${HEADLESS:-false}
+  DOCKER: "true"
+  TZ: ${TZ:-America/Sao_Paulo}
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  SMTP_FROM: ${SMTP_FROM:-}
+  WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://api.reservaai.com.br/api}
+  WHATSAPP_API_TOKEN: ${WHATSAPP_API_TOKEN:-}
+  PAINEL_URL_PUBLICA: ${BORO_PAINEL_URL_PUBLICA:-https://efornecedor.reservaai.com.br}
+
 services:
   portal-fornecedores:
     <<: *robo-base
     container_name: portal-fornecedores
+    volumes:
+      - portal_logs:/app/logs
     environment:
       <<: *robo-env
       ROBO_SLOT: "1"
@@ -49,6 +85,8 @@ services:
   portal-fornecedores-2:
     <<: *robo-base
     container_name: portal-fornecedores-2
+    volumes:
+      - portal_logs:/app/logs
     environment:
       <<: *robo-env
       ROBO_SLOT: "2"
@@ -57,10 +95,41 @@ services:
   portal-fornecedores-3:
     <<: *robo-base
     container_name: portal-fornecedores-3
+    volumes:
+      - portal_logs:/app/logs
     environment:
       <<: *robo-env
       ROBO_SLOT: "3"
       PROXY: ${PROXY_3:-${PROXY:-}}
+
+  efornecedorboro1:
+    <<: *robo-base
+    container_name: efornecedorboro1
+    volumes:
+      - portal_logs_boro:/app/logs
+    environment:
+      <<: *robo-boro-env
+      ROBO_SLOT: "1"
+
+  efornecedorboro2:
+    <<: *robo-base
+    container_name: efornecedorboro2
+    volumes:
+      - portal_logs_boro:/app/logs
+    environment:
+      <<: *robo-boro-env
+      ROBO_SLOT: "2"
+      PROXY: ${PROXY_BORO_2:-${PROXY_BORO:-${PROXY:-}}}
+
+  efornecedorboro3:
+    <<: *robo-base
+    container_name: efornecedorboro3
+    volumes:
+      - portal_logs_boro:/app/logs
+    environment:
+      <<: *robo-boro-env
+      ROBO_SLOT: "3"
+      PROXY: ${PROXY_BORO_3:-${PROXY_BORO:-${PROXY:-}}}
 
   painel:
     build:
@@ -105,7 +174,9 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - painel_storage:/var/www/html/storage
       - portal_logs:/var/robo-logs:ro
+      - portal_logs_boro:/var/robo-logs-boro:ro
 
 volumes:
   portal_logs:
+  portal_logs_boro:
   painel_storage:

@@ -4,19 +4,34 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Crypt;
 
 class Cliente extends Model
 {
+    protected $connection = 'central';
+
     protected $table = 'clientes';
 
     protected $guarded = [];
+
+    protected $hidden = [
+        'db_password',
+    ];
 
     protected function casts(): array
     {
         return [
             'max_robos' => 'integer',
             'ativo' => 'boolean',
+            'db_port' => 'integer',
         ];
+    }
+
+    public function temBancoProprio(): bool
+    {
+        return filled($this->db_host)
+            && filled($this->db_database)
+            && filled($this->db_username);
     }
 
     /**
@@ -47,6 +62,15 @@ class Cliente extends Model
     public function users(): HasMany
     {
         return $this->hasMany(User::class, 'cliente_id');
+    }
+
+    public function definirSenhaDb(?string $senhaPlain): void
+    {
+        if ($senhaPlain === null || $senhaPlain === '') {
+            return;
+        }
+
+        $this->db_password = Crypt::encryptString($senhaPlain);
     }
 
     public static function corSuave(string $hex): string

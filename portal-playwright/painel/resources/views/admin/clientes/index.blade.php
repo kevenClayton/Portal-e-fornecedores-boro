@@ -18,6 +18,7 @@
             <tr>
                 <th class="px-4 py-3">Cliente</th>
                 <th class="px-4 py-3">Cor</th>
+                <th class="px-4 py-3">Banco</th>
                 <th class="px-4 py-3">Máx. robôs</th>
                 <th class="px-4 py-3">Containers</th>
                 <th class="px-4 py-3">Status</th>
@@ -36,6 +37,14 @@
                             <span class="h-4 w-4 rounded-full border border-line" style="background: {{ $cliente->cor_primaria }}"></span>
                             {{ $cliente->cor_primaria }}
                         </span>
+                    </td>
+                    <td class="px-4 py-3 text-xs text-slate-600">
+                        @if ($cliente->temBancoProprio())
+                            <span class="font-semibold">{{ $cliente->db_database }}</span>
+                            <div class="truncate max-w-[10rem]" title="{{ $cliente->db_host }}">{{ $cliente->db_host }}</div>
+                        @else
+                            compartilhado
+                        @endif
                     </td>
                     <td class="px-4 py-3">{{ $cliente->max_robos }}</td>
                     <td class="px-4 py-3 text-xs text-slate-600 max-w-xs truncate" title="{{ $cliente->containers }}">
@@ -58,7 +67,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="6" class="px-4 py-8 text-center text-slate-500">Nenhum cliente cadastrado.</td>
+                    <td colspan="7" class="px-4 py-8 text-center text-slate-500">Nenhum cliente cadastrado.</td>
                 </tr>
             @endforelse
             </tbody>

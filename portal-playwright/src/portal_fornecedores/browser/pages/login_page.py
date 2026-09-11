@@ -1,4 +1,5 @@
 import logging
+import random
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -159,17 +160,45 @@ class LoginPage:
     logger.error("Nao foi possivel contornar aviso do navegador")
     return False
 
-  def _obter_acao_recaptcha(self) -> str:
-    classe = self._page.locator(self.SELECTOR_BOTAO).get_attribute("class") or ""
+  def _obter_acao_recaptcha(self, botao_selector: Optional[str] = None) -> str:
+    seletor = botao_selector or self.SELECTOR_BOTAO
+    classe = ""
+    try:
+      if self._page.locator(seletor).count() > 0:
+        classe = self._page.locator(seletor).first.get_attribute("class") or ""
+    except Exception:
+      classe = ""
     marcador = "captcha"
     indice = classe.lower().find(marcador)
     if indice < 0:
-      return "LOGIN"
+      return "LOGIN" if seletor == self.SELECTOR_BOTAO else "SUBMIT"
     acao = classe[indice + len(marcador) :].lstrip("-").strip().split(" ")[0]
-    return acao or "LOGIN"
+    return acao or ("LOGIN" if seletor == self.SELECTOR_BOTAO else "SUBMIT")
 
-  def _preencher_token_recaptcha(self) -> bool:
-    """Gera token reCAPTCHA v3 (WAF session) antes do postback do login."""
+  def _aquecer_interacao_humana(self) -> None:
+    """Pequenos movimentos/scroll antes do execute — ajuda o score do reCAPTCHA v3."""
+    try:
+      viewport = self._page.viewport_size or {"width": 1366, "height": 768}
+      for _ in range(3):
+        pos_x = random.randint(80, max(120, viewport["width"] - 80))
+        pos_y = random.randint(80, max(120, viewport["height"] - 80))
+        self._page.mouse.move(pos_x, pos_y, steps=random.randint(8, 18))
+        self._page.wait_for_timeout(random.randint(80, 220))
+      self._page.mouse.wheel(0, random.randint(40, 120))
+      self._page.wait_for_timeout(random.randint(150, 400))
+    except Exception:
+      pass
+
+  def _preencher_token_recaptcha(
+    self,
+    botao_selector: Optional[str] = None,
+    obrigatorio: bool = True,
+  ) -> bool:
+    """Gera token reCAPTCHA v3 (WAF session) imediatamente antes do postback ASP.NET.
+
+    Se obrigatorio=False, falhas de carga do grecaptcha só retornam False
+    (útil no Filtrar, onde o portal às vezes não exige token).
+    """
     if self._page.locator("#reCaptcha_Key").count() == 0:
       return False
 
@@ -177,22 +206,35 @@ class LoginPage:
     if not chave:
       return False
 
-    acao = self._obter_acao_recaptcha()
+    acao = self._obter_acao_recaptcha(botao_selector=botao_selector)
     logger.info("Gerando token reCAPTCHA (action=%s)...", acao)
 
     try:
-      self._page.wait_for_function("() => typeof grecaptcha !== 'undefined' && !!grecaptcha.execute", timeout=20_000)
+      self._page.wait_for_function(
+        "() => typeof grecaptcha !== 'undefined' && !!grecaptcha.execute",
+        timeout=8_000 if not obrigatorio else 20_000,
+      )
     except PlaywrightTimeoutError as erro:
+      if not obrigatorio:
+        logger.warning("reCAPTCHA nao disponivel — seguindo sem token manual")
+        return False
       raise RuntimeError("reCAPTCHA nao carregou a tempo") from erro
+
+    self._aquecer_interacao_humana()
 
     token = self._page.evaluate(
       """async ({ siteKey, action }) => {
         await new Promise((resolve) => grecaptcha.ready(resolve));
+        // Pequena espera após ready — tokens gerados no instante do load costumam ter score pior
+        await new Promise((resolve) => setTimeout(resolve, 400 + Math.floor(Math.random() * 500)));
         return await grecaptcha.execute(siteKey, { action });
       }""",
       {"siteKey": chave, "action": acao},
     )
     if not token:
+      if not obrigatorio:
+        logger.warning("Falha ao gerar token reCAPTCHA — seguindo sem token manual")
+        return False
       raise RuntimeError("Falha ao gerar token reCAPTCHA")
 
     self._page.evaluate(
@@ -221,6 +263,30 @@ class LoginPage:
     except Exception:
       pass
     return ""
+
+  @staticmethod
+  def _parece_credencial_invalida(detalhe: str) -> bool:
+    texto = (detalhe or "").lower()
+    if not texto:
+      return False
+    # Captcha/WAF não é senha — deixa o fluxo de rotação de proxy tratar
+    if "captcha" in texto or "recaptcha" in texto:
+      return False
+    marcadores = (
+      "senha",
+      "usuário",
+      "usuario",
+      "login",
+      "credencial",
+      "incorret",
+      "inválid",
+      "invalid",
+      "não confere",
+      "nao confere",
+      "autentica",
+      "acesso negado",
+    )
+    return any(marcador in texto for marcador in marcadores)
 
   def fazer_login(self, usuario: str, senha: str) -> None:
     self.navegar()
@@ -265,7 +331,14 @@ class LoginPage:
       raise RuntimeError("Login bloqueado na tela de configuracao do navegador (Sites Confiaveis).")
 
     if self._esta_na_tela_login():
+      from portal_fornecedores.errors import CredencialPortalInvalida
+
       detalhe = self._mensagem_erro_login() or "credencial invalida, reCAPTCHA/WAF ou bloqueio do portal"
+      if self._parece_credencial_invalida(detalhe):
+        raise CredencialPortalInvalida(
+          f"Usuário ou senha do portal incorretos ({detalhe}). "
+          "Corrija em Parâmetros e inicie a frota novamente."
+        )
       raise RuntimeError(f"Login nao concluiu: ainda na tela de login ({detalhe}).")
 
     logger.info("Login realizado")

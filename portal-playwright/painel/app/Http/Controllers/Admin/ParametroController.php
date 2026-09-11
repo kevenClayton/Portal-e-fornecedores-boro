@@ -114,14 +114,17 @@ class ParametroController extends Controller
 
     public function storeOrigem(Request $request): RedirectResponse
     {
-        $clienteId = Tenant::requireId();
+        $regrasNome = ['required', 'string', 'max:150'];
+        if (Tenant::usaBancoProprio()) {
+            $regrasNome[] = Rule::unique('origens', 'nome_origem')->connection('tenant');
+        } else {
+            $clienteId = Tenant::requireId();
+            $regrasNome[] = Rule::unique('origens', 'nome_origem')
+                ->connection('tenant')
+                ->where(fn ($query) => $query->where('cliente_id', $clienteId));
+        }
         $dados = $request->validate([
-            'nome_origem' => [
-                'required',
-                'string',
-                'max:150',
-                Rule::unique('origens', 'nome_origem')->where(fn ($query) => $query->where('cliente_id', $clienteId)),
-            ],
+            'nome_origem' => $regrasNome,
         ]);
         Origem::query()->create([
             'nome_origem' => $dados['nome_origem'],
@@ -141,14 +144,17 @@ class ParametroController extends Controller
 
     public function storeDestino(Request $request): RedirectResponse
     {
-        $clienteId = Tenant::requireId();
+        $regrasNome = ['required', 'string', 'max:150'];
+        if (Tenant::usaBancoProprio()) {
+            $regrasNome[] = Rule::unique('destinos', 'nome_destino')->connection('tenant');
+        } else {
+            $clienteId = Tenant::requireId();
+            $regrasNome[] = Rule::unique('destinos', 'nome_destino')
+                ->connection('tenant')
+                ->where(fn ($query) => $query->where('cliente_id', $clienteId));
+        }
         $dados = $request->validate([
-            'nome_destino' => [
-                'required',
-                'string',
-                'max:150',
-                Rule::unique('destinos', 'nome_destino')->where(fn ($query) => $query->where('cliente_id', $clienteId)),
-            ],
+            'nome_destino' => $regrasNome,
         ]);
         Destino::query()->create([
             'nome_destino' => $dados['nome_destino'],
@@ -168,14 +174,17 @@ class ParametroController extends Controller
 
     public function storeTipo(Request $request): RedirectResponse
     {
-        $clienteId = Tenant::requireId();
+        $regrasNome = ['required', 'string', 'max:50'];
+        if (Tenant::usaBancoProprio()) {
+            $regrasNome[] = Rule::unique('tipo_veiculo', 'nome_tipo_veiculo')->connection('tenant');
+        } else {
+            $clienteId = Tenant::requireId();
+            $regrasNome[] = Rule::unique('tipo_veiculo', 'nome_tipo_veiculo')
+                ->connection('tenant')
+                ->where(fn ($query) => $query->where('cliente_id', $clienteId));
+        }
         $dados = $request->validate([
-            'nome_tipo_veiculo' => [
-                'required',
-                'string',
-                'max:50',
-                Rule::unique('tipo_veiculo', 'nome_tipo_veiculo')->where(fn ($query) => $query->where('cliente_id', $clienteId)),
-            ],
+            'nome_tipo_veiculo' => $regrasNome,
         ]);
         TipoVeiculo::query()->create([
             'nome_tipo_veiculo' => $dados['nome_tipo_veiculo'],

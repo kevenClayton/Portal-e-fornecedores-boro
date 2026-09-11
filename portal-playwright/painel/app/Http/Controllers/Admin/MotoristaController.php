@@ -9,6 +9,7 @@ use App\Models\Origem;
 use App\Models\TipoVeiculo;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
 
 class MotoristaController extends Controller
@@ -147,6 +148,7 @@ class MotoristaController extends Controller
             'placa' => ['required', 'string', 'max:20'],
             'placa_carreta' => ['nullable', 'string', 'max:20'],
             'cpf' => ['required', 'string', 'max:20'],
+            'celular' => ['nullable', 'string', 'max:30'],
             'ordem_motorista' => ['nullable', 'integer', 'min:1'],
             'aceita_bobina' => ['nullable', 'boolean'],
             'situacao' => ['nullable', 'boolean'],
@@ -156,6 +158,31 @@ class MotoristaController extends Controller
         $dados['situacao'] = $request->boolean('situacao');
         $dados['ordem_motorista'] = (int) ($dados['ordem_motorista'] ?? 100);
         $dados['placa_carreta'] = $dados['placa_carreta'] ?? null;
+        $dados['celular'] = trim((string) ($dados['celular'] ?? ''));
+
+        return $this->completarCamposLegado($dados);
+    }
+
+    /**
+     * Schema Boro ainda exige colunas legadas (celular/regioes_*) sem default.
+     */
+    protected function completarCamposLegado(array $dados): array
+    {
+        $schema = Schema::connection('tenant');
+
+        if ($schema->hasColumn('motoristas', 'celular')) {
+            $dados['celular'] = (string) ($dados['celular'] ?? '');
+        } else {
+            unset($dados['celular']);
+        }
+
+        if ($schema->hasColumn('motoristas', 'regioes_origem')) {
+            $dados['regioes_origem'] = (string) ($dados['regioes_origem'] ?? '');
+        }
+
+        if ($schema->hasColumn('motoristas', 'regioes_cluster')) {
+            $dados['regioes_cluster'] = (string) ($dados['regioes_cluster'] ?? '');
+        }
 
         return $dados;
     }

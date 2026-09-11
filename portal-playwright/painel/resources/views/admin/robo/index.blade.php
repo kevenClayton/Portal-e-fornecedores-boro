@@ -75,7 +75,7 @@
             <button type="button" id="btn-atualizar" class="btn-primary">Atualizar</button>
             <form method="POST" action="{{ route('admin.robo.stop') }}">
                 @csrf
-                <button class="btn-danger" @disabled(! $frotaLigada)>Parar frota</button>
+                <button type="submit" id="btn-parar-frota" class="btn-danger" @disabled(! $frotaLigada)>Parar frota</button>
             </form>
         </div>
     </div>
@@ -222,7 +222,7 @@
                             </label>
                         </div>
                     </div>
-                    <button class="btn-success w-full">{{ $frotaLigada ? 'Reiniciar frota' : 'Iniciar frota' }}</button>
+                    <button type="submit" id="btn-iniciar-frota" class="btn-success w-full">{{ $frotaLigada ? 'Reiniciar frota' : 'Iniciar frota' }}</button>
                 </form>
 
                 <form method="POST" action="{{ route('admin.robo.agenda') }}" class="panel-pad space-y-4">
@@ -452,9 +452,16 @@
         const runningCount = Number(status?.running_count || 0);
         const maxRobos = Number(@json((int) ($maxRobos ?? 1))) || 1;
         const qtd = Math.max(1, Math.min(maxRobos, Number(quantidade || quantidadeSelecionada())));
+        const frotaLigada = runningCount > 0;
+
+        const btnParar = document.getElementById('btn-parar-frota');
+        if (btnParar) btnParar.disabled = !frotaLigada;
+
+        const btnIniciar = document.getElementById('btn-iniciar-frota');
+        if (btnIniciar) btnIniciar.textContent = frotaLigada ? 'Reiniciar frota' : 'Iniciar frota';
 
         if (frotaBadge) {
-            if (runningCount > 0) {
+            if (frotaLigada) {
                 frotaBadge.className = 'badge-ok';
                 frotaBadge.textContent = `${runningCount} / ${qtd} ligado(s)`;
             } else {

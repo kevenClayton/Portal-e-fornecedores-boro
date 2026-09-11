@@ -28,7 +28,9 @@ class AcompanhamentoService:
     self._ultimo_screenshot_ts = 0.0
     self._publicacoes_desde_limpeza = 0
     self._robo_slot = max(1, min(3, int(robo_slot or 1)))
-    self._cliente_id = max(1, int(cliente_id if cliente_id is not None else get_settings().cliente_id or 1))
+    raw = cliente_id if cliente_id is not None else get_settings().cliente_id
+    self._cliente_id = max(0, int(raw or 0))
+    self._multi_tenant = self._cliente_id > 0
     self._arquivo_screenshot = DIR_SCREENSHOTS / f"atual_{self._robo_slot}.png"
     # Compat: slot 1 também grava atual.png para o painel legado
     self._arquivo_screenshot_legado = DIR_SCREENSHOTS / "atual.png" if self._robo_slot == 1 else None
@@ -68,14 +70,24 @@ class AcompanhamentoService:
         self._page.screenshot(path=str(self._arquivo_screenshot_legado), full_page=False)
       agora = datetime.now(FUSO_BRASIL).strftime("%Y-%m-%d %H:%M:%S")
       with self._db.cursor() as cursor:
-        cursor.execute(
-          """
-          UPDATE robo_acompanhamento
-          SET screenshot_em = %s, pedir_screenshot = 0
-          WHERE cliente_id = %s
-          """,
-          (agora, self._cliente_id),
-        )
+        if self._multi_tenant:
+          cursor.execute(
+            """
+            UPDATE robo_acompanhamento
+            SET screenshot_em = %s, pedir_screenshot = 0
+            WHERE cliente_id = %s
+            """,
+            (agora, self._cliente_id),
+          )
+        else:
+          cursor.execute(
+            """
+            UPDATE robo_acompanhamento
+            SET screenshot_em = %s, pedir_screenshot = 0
+            WHERE id = 1
+            """,
+            (agora,),
+          )
       self._ultimo_screenshot_ts = datetime.now().timestamp()
       logger.info("Screenshot atualizado (%s)", motivo or "manual")
       return True
@@ -91,10 +103,13 @@ class AcompanhamentoService:
   def _pedido_screenshot(self) -> bool:
     try:
       with self._db.cursor() as cursor:
-        cursor.execute(
-          "SELECT pedir_screenshot FROM robo_acompanhamento WHERE cliente_id = %s LIMIT 1",
-          (self._cliente_id,),
-        )
+        if self._multi_tenant:
+          cursor.execute(
+            "SELECT pedir_screenshot FROM robo_acompanhamento WHERE cliente_id = %s LIMIT 1",
+            (self._cliente_id,),
+          )
+        else:
+          cursor.execute("SELECT pedir_screenshot FROM robo_acompanhamento WHERE id = 1")
         row = cursor.fetchone()
         return bool(row and row[0])
     except Exception:
@@ -131,44 +146,76 @@ class AcompanhamentoService:
     resumo: Optional[str],
   ) -> None:
     with self._db.cursor() as cursor:
-      cursor.execute(
-        """
-        INSERT INTO robo_acompanhamento
-          (cliente_id, etapa, mensagem, cluster_atual, documento_atual, resumo_ciclo, atualizado_em)
-        VALUES (%s, %s, %s, %s, %s, %s, NOW())
-        ON DUPLICATE KEY UPDATE
-          etapa = VALUES(etapa),
-          mensagem = VALUES(mensagem),
-          cluster_atual = COALESCE(VALUES(cluster_atual), cluster_atual),
-          documento_atual = COALESCE(VALUES(documento_atual), documento_atual),
-          resumo_ciclo = COALESCE(VALUES(resumo_ciclo), resumo_ciclo),
-          atualizado_em = NOW()
-        """,
-        (self._cliente_id, etapa, mensagem[:500], cluster, documento, resumo),
-      )
+      if self._multi_tenant:
+        cursor.execute(
+          """
+          INSERT INTO robo_acompanhamento
+            (cliente_id, etapa, mensagem, cluster_atual, documento_atual, resumo_ciclo, atualizado_em)
+          VALUES (%s, %s, %s, %s, %s, %s, NOW())
+          ON DUPLICATE KEY UPDATE
+            etapa = VALUES(etapa),
+            mensagem = VALUES(mensagem),
+            cluster_atual = COALESCE(VALUES(cluster_atual), cluster_atual),
+            documento_atual = COALESCE(VALUES(documento_atual), documento_atual),
+            resumo_ciclo = COALESCE(VALUES(resumo_ciclo), resumo_ciclo),
+            atualizado_em = NOW()
+          """,
+          (self._cliente_id, etapa, mensagem[:500], cluster, documento, resumo),
+        )
+      else:
+        cursor.execute(
+          """
+          INSERT INTO robo_acompanhamento
+            (id, etapa, mensagem, cluster_atual, documento_atual, resumo_ciclo, atualizado_em)
+          VALUES (1, %s, %s, %s, %s, %s, NOW())
+          ON DUPLICATE KEY UPDATE
+            etapa = VALUES(etapa),
+            mensagem = VALUES(mensagem),
+            cluster_atual = COALESCE(VALUES(cluster_atual), cluster_atual),
+            documento_atual = COALESCE(VALUES(documento_atual), documento_atual),
+            resumo_ciclo = COALESCE(VALUES(resumo_ciclo), resumo_ciclo),
+            atualizado_em = NOW()
+          """,
+          (etapa, mensagem[:500], cluster, documento, resumo),
+        )
 
   def _inserir_evento(self, etapa: str, mensagem: str) -> None:
     # Evita spam: não grava todos os "Cluster nao existente"
     if "Cluster nao existente" in mensagem or "Cluster não existente" in mensagem:
       return
     with self._db.cursor() as cursor:
-      cursor.execute(
-        "INSERT INTO robo_eventos (etapa, mensagem, created_at, cliente_id) VALUES (%s, %s, NOW(), %s)",
-        (etapa, mensagem[:500], self._cliente_id),
-      )
+      if self._multi_tenant:
+        cursor.execute(
+          "INSERT INTO robo_eventos (etapa, mensagem, created_at, cliente_id) VALUES (%s, %s, NOW(), %s)",
+          (etapa, mensagem[:500], self._cliente_id),
+        )
+      else:
+        cursor.execute(
+          "INSERT INTO robo_eventos (etapa, mensagem, created_at) VALUES (%s, %s, NOW())",
+          (etapa, mensagem[:500]),
+        )
 
   def _limpar_eventos_antigos(self) -> None:
     with self._db.cursor() as cursor:
-      cursor.execute(
-        "SELECT id FROM robo_eventos WHERE cliente_id = %s ORDER BY id DESC LIMIT 1 OFFSET %s",
-        (self._cliente_id, MAX_EVENTOS),
-      )
-      row = cursor.fetchone()
-      if row:
+      if self._multi_tenant:
         cursor.execute(
-          "DELETE FROM robo_eventos WHERE cliente_id = %s AND id <= %s",
-          (self._cliente_id, row[0]),
+          "SELECT id FROM robo_eventos WHERE cliente_id = %s ORDER BY id DESC LIMIT 1 OFFSET %s",
+          (self._cliente_id, MAX_EVENTOS),
         )
+        row = cursor.fetchone()
+        if row:
+          cursor.execute(
+            "DELETE FROM robo_eventos WHERE cliente_id = %s AND id <= %s",
+            (self._cliente_id, row[0]),
+          )
+      else:
+        cursor.execute(
+          "SELECT id FROM robo_eventos ORDER BY id DESC LIMIT 1 OFFSET %s",
+          (MAX_EVENTOS,),
+        )
+        row = cursor.fetchone()
+        if row:
+          cursor.execute("DELETE FROM robo_eventos WHERE id <= %s", (row[0],))
 
   @staticmethod
   def _classificar_etapa(mensagem: str) -> str:

@@ -59,8 +59,22 @@ class Settings(BaseSettings):
     default=None,
     description="ID do plano Webshare (ISP/residential). Vazio = detecta automaticamente.",
   )
+  cloakbrowser_license_key: str = Field(
+    default="",
+    description="Licença CloakBrowser Pro (env CLOAKBROWSER_LICENSE_KEY).",
+  )
+  usar_cloakbrowser: bool = Field(
+    default=True,
+    description="Usa CloakBrowser quando a licença estiver configurada.",
+  )
+  cloak_humanize: bool = True
+  cloak_human_preset: str = "careful"
+  cloak_geoip: bool = True
   robo_slot: int = Field(default=1, description="Identificador do robô na frota (1–3)")
-  cliente_id: int = Field(default=1, description="ID do cliente multi-tenant no banco compartilhado")
+  cliente_id: int = Field(
+    default=1,
+    description="ID multi-tenant no banco compartilhado. Use 0 para banco single-tenant (ex.: Boro).",
+  )
 
   headless: bool = False
   slow_mo: int = 0
