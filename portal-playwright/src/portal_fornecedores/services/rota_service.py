@@ -9,6 +9,7 @@ from portal_fornecedores.database.repositories.dados_repository import DadosRepo
 from portal_fornecedores.models.entidades import ConfiguracaoBusca, DadosRota, ParametrosOperacao
 from portal_fornecedores.services.email_service import EmailService
 from portal_fornecedores.services.vinculacao_service import VinculacaoService
+from portal_fornecedores.utils.modo_horario import cadencia_efetiva, modo_reduzido_ativo
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,8 @@ class RotaService:
     usuario, senha = self._repo.obter_login()
 
     # Opções operacionais vêm do banco (painel → Iniciar robô / Parâmetros)
-    config.tempo_espera_seg = max(1, int(self._parametros.intervalo_espera_seg or 30))
+    cadencia_painel = max(1, int(self._parametros.intervalo_espera_seg or 30))
+    config.tempo_espera_seg = cadencia_efetiva(cadencia_painel)
     config.verificar_valor_carga = bool(self._parametros.verificar_valor_carga)
     config.verificar_bobina = bool(self._parametros.verificar_bobina)
     config.verificar_multiplos_destinos = bool(self._parametros.verificar_multiplos_destinos)
@@ -66,9 +68,10 @@ class RotaService:
     # config.robo_slot vem do env ROBO_SLOT (main.py) e não muda aqui
 
     espera_individual = config.tempo_espera_seg * config.robo_quantidade
+    sufixo_horario = " | modo noturno (ritmo reduzido)" if modo_reduzido_ativo() else ""
     self._status(
       "Ciclo — frota={frota} slot={slot} | busca a cada {cadencia}s | espera deste robô={espera}s | "
-      "detalhes: valor={valor} bobina={bobina} destinos={destinos}".format(
+      "detalhes: valor={valor} bobina={bobina} destinos={destinos}{horario}".format(
         frota=config.robo_quantidade,
         slot=config.robo_slot,
         cadencia=config.tempo_espera_seg,
@@ -76,6 +79,7 @@ class RotaService:
         valor="sim" if config.verificar_valor_carga else "nao",
         bobina="sim" if config.verificar_bobina else "nao",
         destinos="sim" if config.verificar_multiplos_destinos else "nao",
+        horario=sufixo_horario,
       )
     )
 

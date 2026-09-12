@@ -179,7 +179,11 @@ class PortalApp:
             self._reiniciar_browser(espera_seg=3)
             continue
 
-          if "captcha" in mensagem.lower():
+          eh_erro_de_codigo = isinstance(
+            erro,
+            (TypeError, AttributeError, NameError, SyntaxError, KeyError, IndexError, ImportError, ValueError),
+          )
+          if not eh_erro_de_codigo and "captcha" in mensagem.lower():
             # Timeout de script ≠ rejeição do portal — não gasta rotação/parada por isso
             if "nao carregou" in mensagem.lower() or "não carregou" in mensagem.lower():
               self._status("reCAPTCHA indisponivel na pagina — repetindo ciclo em 8s...")

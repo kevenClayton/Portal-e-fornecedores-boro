@@ -1,5 +1,4 @@
 import logging
-import random
 import re
 import time
 from typing import List, Optional
@@ -12,6 +11,7 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from portal_fornecedores.config.settings import Settings, get_settings
 from portal_fornecedores.models.entidades import DadosRota
+from portal_fornecedores.utils.modo_horario import intervalo_aleatorio_ms, reuso_pesquisa_efetivo
 
 logger = logging.getLogger(__name__)
 
@@ -100,10 +100,10 @@ class CargasPage:
         proximo_aviso_em = decorrido + 15
 
   def _pausar(self, minimo_ms: int = 900, maximo_ms: int = 1800) -> None:
-    """Pausa variável para não parecer clique robótico."""
+    """Pausa variável para não parecer clique robótico (mais lenta de 21h–06h)."""
     if maximo_ms < minimo_ms:
       maximo_ms = minimo_ms
-    self._page.wait_for_timeout(random.randint(minimo_ms, maximo_ms))
+    self._page.wait_for_timeout(intervalo_aleatorio_ms(minimo_ms, maximo_ms))
 
   def _cluster_visivel(self) -> bool:
     try:
@@ -235,7 +235,7 @@ class CargasPage:
     """Gera token manualmente e desativa onsubmit assíncrono (fallback)."""
     self._fechar_overlays()
     login_helper._preencher_token_recaptcha(botao_selector=self.SELECTOR_PESQUISA)
-    self._page.wait_for_timeout(random.randint(120, 280))
+    self._page.wait_for_timeout(intervalo_aleatorio_ms(120, 280))
     try:
       with self._page.expect_navigation(wait_until="domcontentloaded", timeout=45_000):
         self._clicar_seguro(botao_pesquisa)
@@ -252,10 +252,12 @@ class CargasPage:
     login_helper.contornar_aviso_navegador()
 
     # Ciclo intermediário: mantém a tela de clusters e só refiltra depois (rota_service).
-    # Evita captcha do Pesquisar a cada 15–35s; a cada REUSO_PESQUISA_SEG faz busca cheia.
+    # Evita captcha do Pesquisar a cada 15–35s; a cada reuso_seg faz busca cheia.
+    # De madrugada o reuso sobe (ex.: 10 min) junto com a cadência mínima de 3 min.
+    reuso_seg = reuso_pesquisa_efetivo(self.REUSO_PESQUISA_SEG)
     idade = time.time() - self._ultima_pesquisa_ok_em if self._ultima_pesquisa_ok_em else 10**9
-    if self.REUSO_PESQUISA_SEG > 0 and self._cluster_visivel() and idade < self.REUSO_PESQUISA_SEG:
-      restante = int(self.REUSO_PESQUISA_SEG - idade)
+    if reuso_seg > 0 and self._cluster_visivel() and idade < reuso_seg:
+      restante = int(reuso_seg - idade)
       status(
         f"Ciclo intermediario — sem Pesquisar/captcha; "
         f"refiltrando clusters com motorista (busca cheia em ~{restante}s)..."

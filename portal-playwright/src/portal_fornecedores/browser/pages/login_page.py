@@ -8,6 +8,7 @@ from playwright.sync_api import Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from portal_fornecedores.config.settings import Settings, get_settings
+from portal_fornecedores.utils.modo_horario import intervalo_aleatorio_ms
 
 logger = logging.getLogger(__name__)
 
@@ -183,11 +184,14 @@ class LoginPage:
         pos_x = random.randint(80, max(120, viewport["width"] - 80))
         pos_y = random.randint(80, max(120, viewport["height"] - 80))
         self._page.mouse.move(pos_x, pos_y, steps=random.randint(8, 18))
-        self._page.wait_for_timeout(random.randint(80, 220))
+        self._page.wait_for_timeout(intervalo_aleatorio_ms(80, 220))
       self._page.mouse.wheel(0, random.randint(40, 120))
-      self._page.wait_for_timeout(random.randint(150, 400))
+      self._page.wait_for_timeout(intervalo_aleatorio_ms(150, 400))
     except Exception:
       pass
+
+  def _pausar(self, minimo_ms: int = 400, maximo_ms: int = 900) -> None:
+    self._page.wait_for_timeout(intervalo_aleatorio_ms(minimo_ms, maximo_ms))
 
   def _preencher_token_recaptcha(
     self,
@@ -292,16 +296,16 @@ class LoginPage:
     self.navegar()
     self._page.wait_for_selector(self.SELECTOR_USUARIO, timeout=30_000)
     self.aceitar_cookies()
-    self._page.wait_for_timeout(800)
+    self._pausar(800, 1400)
 
     campo_usuario = self._page.locator(self.SELECTOR_USUARIO)
     campo_senha = self._page.locator(self.SELECTOR_SENHA)
     campo_usuario.click()
     campo_usuario.fill(usuario)
-    self._page.wait_for_timeout(350)
+    self._pausar(350, 700)
     campo_senha.click()
     campo_senha.fill(senha)
-    self._page.wait_for_timeout(500)
+    self._pausar(500, 1000)
 
     try:
       self._page.evaluate(
@@ -316,7 +320,7 @@ class LoginPage:
 
     # Token gerado imediatamente antes do clique — tokens velhos / score baixo viram "Captcha inválido"
     self._preencher_token_recaptcha()
-    self._page.wait_for_timeout(400)
+    self._pausar(400, 800)
     try:
       with self._page.expect_navigation(wait_until="domcontentloaded", timeout=45_000):
         self._page.locator(self.SELECTOR_BOTAO).click()
@@ -325,7 +329,7 @@ class LoginPage:
 
     self.aceitar_cookies()
     self.contornar_aviso_navegador()
-    self._page.wait_for_timeout(1_000)
+    self._pausar(1000, 1800)
 
     if self._esta_no_aviso_navegador():
       raise RuntimeError("Login bloqueado na tela de configuracao do navegador (Sites Confiaveis).")

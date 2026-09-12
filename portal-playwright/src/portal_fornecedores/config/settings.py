@@ -70,6 +70,21 @@ class Settings(BaseSettings):
   cloak_humanize: bool = True
   cloak_human_preset: str = "careful"
   cloak_geoip: bool = True
+  # Ritmo reduzido 21h–06h (America/Sao_Paulo): ciclo mínimo + cliques mais lentos
+  modo_noturno_inicio_hora: int = Field(default=21, description="Início do ritmo reduzido (hora local BR)")
+  modo_noturno_fim_hora: int = Field(default=6, description="Fim do ritmo reduzido (hora local BR, exclusive)")
+  modo_noturno_cadencia_seg: int = Field(
+    default=180,
+    description="Cadência mínima entre buscas no horário reduzido (segundos).",
+  )
+  modo_noturno_fator_pausa: float = Field(
+    default=2.5,
+    description="Multiplicador das pausas entre cliques no horário reduzido.",
+  )
+  modo_noturno_reuso_pesquisa_seg: int = Field(
+    default=600,
+    description="Intervalo mínimo entre Pesquisar cheio no horário reduzido.",
+  )
   robo_slot: int = Field(default=1, description="Identificador do robô na frota (1–3)")
   cliente_id: int = Field(
     default=1,
