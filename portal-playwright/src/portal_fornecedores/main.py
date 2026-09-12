@@ -183,6 +183,46 @@ class PortalApp:
             erro,
             (TypeError, AttributeError, NameError, SyntaxError, KeyError, IndexError, ImportError, ValueError),
           )
+
+          eh_erro_rede_ou_proxy = any(
+            marcador in mensagem.lower()
+            for marcador in (
+              "err_timed_out",
+              "err_connection_timed_out",
+              "err_proxy_",
+              "err_tunnel_",
+              "err_connection_closed",
+              "err_connection_reset",
+              "err_connection_refused",
+              "err_name_not_resolved",
+              "err_empty_response",
+              "err_internet_disconnected",
+              "timeout 30000ms exceeded",
+              "timeout 45000ms exceeded",
+            )
+          )
+
+          if eh_erro_rede_ou_proxy and not eh_erro_de_codigo:
+            host_antigo = (self._settings.proxy or "").split(":")[0] or "(nenhum)"
+            self._proxy_rotation.registrar_falha(host_antigo, motivo="timeout/rede")
+            novo_proxy = None
+            try:
+              novo_proxy = self._proxy_rotation.trocar_proxy(self._settings.proxy)
+            except Exception as erro_rotacao:
+              logger.warning("Falha ao rotacionar proxy por erro de rede: %s", erro_rotacao)
+
+            if novo_proxy:
+              self._settings.proxy = novo_proxy
+              host_novo = novo_proxy.split(":")[0]
+              self._status(
+                f"Proxy {host_antigo} com falha de conexao com portal. "
+                f"Trocando para {host_novo} e reiniciando em 5s..."
+              )
+            else:
+              self._status(f"Proxy {host_antigo} com falha de conexao. Reiniciando em 10s...")
+            self._reiniciar_browser(espera_seg=5)
+            continue
+
           if not eh_erro_de_codigo and "captcha" in mensagem.lower():
             # Timeout de script ≠ rejeição do portal — não gasta rotação/parada por isso
             if "nao carregou" in mensagem.lower() or "não carregou" in mensagem.lower():
@@ -192,37 +232,32 @@ class PortalApp:
 
             captcha_na_pesquisa = "pesquisar cargas" in mensagem.lower() or "filtrar cluster" in mensagem.lower()
 
-            # Após esgotar tentativas no Pesquisar, troca IP na hora (soft retry no IP queimado não ajuda)
             self._falhas_captcha += 1
-            if self._falhas_captcha >= MAX_FALHAS_CAPTCHA:
-              self._aguardar_novo_start(
-                f"ERRO: Captcha falhou {self._falhas_captcha}x. "
-                "Troque/reponha IPs ISP na Webshare e use Parar + Iniciar frota."
-              )
-              continue
-
             host_antes = (self._settings.proxy or "").split(":")[0] or "(nenhum)"
+            self._proxy_rotation.registrar_falha(host_antes, motivo="captcha rejeitado")
+
             novo_proxy = None
             try:
               novo_proxy = self._proxy_rotation.trocar_proxy(self._settings.proxy)
             except Exception as erro_rotacao:
               logger.warning("Falha ao rotacionar proxy: %s", erro_rotacao)
 
+            # Backoff progressivo: 30s, 60s, 120s, até no máximo 180s (3 minutos)
+            espera = min(180, 30 * min(self._falhas_captcha, 6))
+            origem = "Pesquisar" if captcha_na_pesquisa else "Login"
+
             if novo_proxy:
               self._settings.proxy = novo_proxy
               host_novo = novo_proxy.split(":")[0]
-              espera = min(180, 45 * self._falhas_captcha)
-              origem = "Pesquisar" if captcha_na_pesquisa else "Login"
               self._status(
                 f"Captcha ({origem}) rejeitado no IP {host_antes}. "
                 f"Trocando para {host_novo} e aguardando {espera}s "
-                f"(tentativa {self._falhas_captcha}/{MAX_FALHAS_CAPTCHA})."
+                f"(tentativa #{self._falhas_captcha}) — rotação contínua ativa."
               )
             else:
-              espera = min(900, 180 * self._falhas_captcha)
               self._status(
-                f"Captcha rejeitado (tentativa {self._falhas_captcha}/{MAX_FALHAS_CAPTCHA}). "
-                f"Sem IP novo — aguardando {espera // 60} min. Configure WEBSHARE_API_TOKEN."
+                f"Captcha rejeitado no IP {host_antes} (tentativa #{self._falhas_captcha}). "
+                f"Aguardando {espera}s antes de tentar novamente..."
               )
             self._reiniciar_browser(espera_seg=espera)
             continue
