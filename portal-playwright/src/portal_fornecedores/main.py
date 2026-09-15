@@ -244,7 +244,23 @@ class PortalApp:
 
             # Backoff progressivo: 30s, 60s, 120s, até no máximo 180s (3 minutos)
             espera = min(180, 30 * min(self._falhas_captcha, 6))
-            origem = "Pesquisar" if captcha_na_pesquisa else "Login"
+            if "filtrar cluster" in mensagem.lower():
+              origem = "Filtrar"
+            elif captcha_na_pesquisa:
+              origem = "Pesquisar"
+            else:
+              origem = "Login"
+
+            try:
+              DadosRepository().registrar_auditoria_captcha(
+                slot=self._config.robo_slot,
+                origem=origem,
+                proxy_host=host_antes,
+                tentativa=self._falhas_captcha,
+                motivo=mensagem[:500],
+              )
+            except Exception:
+              pass
 
             if novo_proxy:
               self._settings.proxy = novo_proxy

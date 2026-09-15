@@ -41,6 +41,7 @@
             'items' => [
                 ['route' => 'admin.rotas.index', 'match' => 'admin.rotas.*', 'label' => 'Rotas vinculadas', 'icon' => 'check'],
                 ['route' => 'admin.relatorios.index', 'match' => 'admin.relatorios.*', 'label' => 'Relatórios', 'icon' => 'file'],
+                ['route' => 'admin.auditoria.index', 'match' => 'admin.auditoria.*', 'label' => 'Uso do robô', 'icon' => 'chart'],
             ],
         ],
     ];
@@ -64,6 +65,7 @@
             'settings' => '<path stroke-linecap="round" stroke-linejoin="round" d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm7.4-3.5.5-1.2-1.7-1.5.2-1.9-1.9-.5-1-1.7-1.9.3L12 3l-1.1 1.5-1.9-.3-1 1.7-1.9.5.2 1.9-1.7 1.5.5 1.2-.5 1.2 1.7 1.5-.2 1.9 1.9.5 1 1.7 1.9-.3L12 21l1.1-1.5 1.9.3 1-1.7 1.9-.5-.2-1.9 1.7-1.5-.5-1.2Z"/>',
             'check' => '<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.5 11 14.5 15.5 10M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>',
             'file' => '<path stroke-linecap="round" stroke-linejoin="round" d="M8 3h6l4 4v14a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Zm6 0v4h4"/>',
+            'chart' => '<path stroke-linecap="round" stroke-linejoin="round" d="M4 19h16M7 16V9m5 7V5m5 11v-6"/>',
             'building' => '<path stroke-linecap="round" stroke-linejoin="round" d="M4 21V5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v16M9 21V9m0 0h8a1 1 0 0 1 1 1v11M9 9H4"/>',
             'users' => '<path stroke-linecap="round" stroke-linejoin="round" d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m8-10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm10 10v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
             default => '',

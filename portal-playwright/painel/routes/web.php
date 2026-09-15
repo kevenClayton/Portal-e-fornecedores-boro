@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\AuditoriaController;
 use App\Http\Controllers\Admin\ClienteController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\MotoristaController;
@@ -51,6 +52,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/admin/rotas', [RotaController::class, 'index'])->name('admin.rotas.index');
     Route::get('/admin/relatorios', [RelatorioController::class, 'index'])->name('admin.relatorios.index');
     Route::get('/admin/relatorios/export', [RelatorioController::class, 'export'])->name('admin.relatorios.export');
+    Route::get('/admin/auditoria', [AuditoriaController::class, 'index'])->name('admin.auditoria.index');
 
     Route::get('/admin/robo', [RoboController::class, 'index'])->name('admin.robo.index');
     Route::get('/admin/robo/status', [RoboController::class, 'status'])->name('admin.robo.status');

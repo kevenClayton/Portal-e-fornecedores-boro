@@ -47,16 +47,19 @@ class VinculacaoService:
   ) -> bool:
     self._status(f"Parâmetros OK: {tipo_transporte} - {rota.valor_carga}")
 
+    motoristas = self._repo.motoristas_disponiveis(rota, destino, tipo_transporte)
+    if not motoristas:
+      self._status(
+        f"Doc {rota.numero_documento}: sem motorista para {tipo_transporte} "
+        f"em {destino} — não abre vínculo"
+      )
+      self.registrar_incompativel(rota, destino, "Não tem motorista para rota")
+      return False
+
     if not self._cargas.clicar_vincular(rota.numero_documento):
       return False
 
     self._repo.marcar_documento_processado(rota.numero_documento)
-    motoristas = self._repo.motoristas_disponiveis(rota, destino, tipo_transporte)
-
-    if not motoristas:
-      self.registrar_incompativel(rota, destino, "Não tem motorista para rota")
-      self._cargas.voltar()
-      return False
 
     for motorista in motoristas:
       if self._vincular_motorista(motorista, rota, destino, tipo_transporte):
@@ -133,6 +136,14 @@ class VinculacaoService:
       rota.data, rota.valor_carga, motorista.nome, rota.tipo_transporte,
     )
     self._repo.desativar_motorista(motorista.id_banco)
+    self._repo.registrar_auditoria_decisao(
+      slot=get_settings().robo_slot,
+      doc_transporte=rota.numero_documento,
+      destino=destino,
+      tipo_veiculo=rota.tipo_transporte,
+      decisao="vinculado",
+      motivo=f"Motorista {motorista.nome}",
+    )
     self._email.notificar_rota_vinculada(
       self._parametros.email_notificacao, motorista, rota.numero_documento,
     )
@@ -156,6 +167,16 @@ class VinculacaoService:
       rota.valor_carga, rota.tipo_transporte, rota.peso_total,
       rota.observacoes, rota.prioridade, rota.clientes_mesmo_destino,
       rota.mais_de_um_destino, motivo,
+    )
+    motivo_lower = (motivo or "").lower()
+    decisao = "pulado" if "motorista" in motivo_lower or "tipo veiculo" in motivo_lower else "rejeitado"
+    self._repo.registrar_auditoria_decisao(
+      slot=get_settings().robo_slot,
+      doc_transporte=rota.numero_documento,
+      destino=destino,
+      tipo_veiculo=rota.tipo_transporte,
+      decisao=decisao,
+      motivo=motivo,
     )
     self._notificar_whatsapp(
       situacao="perdida",

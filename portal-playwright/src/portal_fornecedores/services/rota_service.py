@@ -56,6 +56,7 @@ class RotaService:
 
     self._parametros = self._repo.obter_parametros()
     self._repo.limpar_processados_antigos(horas=24)
+    self._repo.limpar_auditoria_antiga(dias=15)
     usuario, senha = self._repo.obter_login()
 
     # Opções operacionais vêm do banco (painel → Iniciar robô / Parâmetros)
@@ -197,6 +198,16 @@ class RotaService:
 
       if not self._repo.tentar_reservar_documento(rota.numero_documento):
         self._status(f"Doc {rota.numero_documento} ja reservado por outro robô/ciclo")
+        continue
+
+      tipo_carga = (rota.tipo_transporte or "").strip()
+      if tipo_carga and not self._repo.existe_motorista_destino_tipo(destino, tipo_carga):
+        motivo = f"Não tem motorista para tipo {tipo_carga}"
+        self._status(
+          f"Doc {rota.numero_documento} ({tipo_carga}): sem motorista compatível "
+          f"no destino — pulando (cluster segue monitorado)"
+        )
+        vinculacao.registrar_incompativel(rota, destino, motivo)
         continue
 
       self._status(

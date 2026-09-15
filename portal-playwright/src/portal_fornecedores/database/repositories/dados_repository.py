@@ -1,8 +1,11 @@
+import logging
 from typing import List, Optional, Tuple
 
 from portal_fornecedores.config.settings import get_settings
 from portal_fornecedores.database.connection import DatabaseConnection
 from portal_fornecedores.models.entidades import DadosMotorista, DadosRota, ParametrosOperacao
+
+logger = logging.getLogger(__name__)
 
 
 def _flag(row: dict, campo: str, padrao: bool = True) -> bool:
@@ -115,6 +118,30 @@ class DadosRepository:
     with self._db.cursor() as cursor:
       cursor.execute(query, params)
       return [row[0] for row in cursor.fetchall()]
+
+  def existe_motorista_destino_tipo(self, destino: str, tipo_transporte: str) -> bool:
+    """Há motorista ativo no destino com o tipo de veículo da carga (sem filtro de bobina)."""
+    filtro_cliente = "AND m.cliente_id = %s AND d.cliente_id = %s" if self._multi_tenant else ""
+    query = f"""
+      SELECT 1
+      FROM motoristas m
+      INNER JOIN motorista_destino md ON m.id = md.motorista_id
+      INNER JOIN destinos d ON md.destino_id = d.id
+      INNER JOIN motorista_tipo_veiculo mtv ON mtv.motorista_id = m.id
+      INNER JOIN tipo_veiculo tv ON tv.id = mtv.tipo_veiculo_id
+      WHERE m.situacao = TRUE
+      {filtro_cliente}
+      AND LOWER(d.nome_destino) = LOWER(%s)
+      AND LOWER(tv.nome_tipo_veiculo) = LOWER(%s)
+      LIMIT 1
+    """
+    if self._multi_tenant:
+      params: tuple = (self._cliente_id, self._cliente_id, destino, tipo_transporte)
+    else:
+      params = (destino, tipo_transporte)
+    with self._db.cursor() as cursor:
+      cursor.execute(query, params)
+      return cursor.fetchone() is not None
 
   def motoristas_disponiveis(
     self,
@@ -350,6 +377,110 @@ class DadosRepository:
         cursor.execute(
           "DELETE FROM rotas_processadas WHERE processado_em < NOW() - INTERVAL %s HOUR",
           (horas,),
+        )
+      return cursor.rowcount
+
+  def registrar_auditoria_decisao(
+    self,
+    *,
+    slot: int,
+    doc_transporte: str,
+    destino: str,
+    tipo_veiculo: str,
+    decisao: str,
+    motivo: str = "",
+  ) -> None:
+    """1 linha por decisão de carga (não por ciclo) — impacto mínimo no banco."""
+    try:
+      if self._multi_tenant:
+        query = """
+          INSERT INTO robo_auditoria
+            (cliente_id, slot, tipo_evento, doc_transporte, destino, tipo_veiculo, decisao, motivo)
+          VALUES (%s, %s, 'decisao_carga', %s, %s, %s, %s, %s)
+        """
+        params = (
+          self._cliente_id,
+          max(1, min(3, int(slot or 1))),
+          (doc_transporte or "")[:100],
+          (destino or "")[:255] or None,
+          (tipo_veiculo or "")[:80] or None,
+          (decisao or "")[:40],
+          (motivo or "")[:500] or None,
+        )
+      else:
+        query = """
+          INSERT INTO robo_auditoria
+            (slot, tipo_evento, doc_transporte, destino, tipo_veiculo, decisao, motivo)
+          VALUES (%s, 'decisao_carga', %s, %s, %s, %s, %s)
+        """
+        params = (
+          max(1, min(3, int(slot or 1))),
+          (doc_transporte or "")[:100],
+          (destino or "")[:255] or None,
+          (tipo_veiculo or "")[:80] or None,
+          (decisao or "")[:40],
+          (motivo or "")[:500] or None,
+        )
+      with self._db.cursor() as cursor:
+        cursor.execute(query, params)
+    except Exception as erro:
+      logger.warning("Falha ao gravar auditoria de decisao: %s", erro)
+
+  def registrar_auditoria_captcha(
+    self,
+    *,
+    slot: int,
+    origem: str,
+    proxy_host: str = "",
+    tentativa: int = 1,
+    motivo: str = "",
+  ) -> None:
+    """1 linha por rejeição de captcha (volume baixo)."""
+    try:
+      if self._multi_tenant:
+        query = """
+          INSERT INTO robo_auditoria
+            (cliente_id, slot, tipo_evento, origem_captcha, proxy_host, tentativa, motivo)
+          VALUES (%s, %s, 'captcha', %s, %s, %s, %s)
+        """
+        params = (
+          self._cliente_id,
+          max(1, min(3, int(slot or 1))),
+          (origem or "Login")[:40],
+          (proxy_host or "")[:80] or None,
+          int(tentativa or 1),
+          (motivo or "")[:500] or None,
+        )
+      else:
+        query = """
+          INSERT INTO robo_auditoria
+            (slot, tipo_evento, origem_captcha, proxy_host, tentativa, motivo)
+          VALUES (%s, 'captcha', %s, %s, %s, %s)
+        """
+        params = (
+          max(1, min(3, int(slot or 1))),
+          (origem or "Login")[:40],
+          (proxy_host or "")[:80] or None,
+          int(tentativa or 1),
+          (motivo or "")[:500] or None,
+        )
+      with self._db.cursor() as cursor:
+        cursor.execute(query, params)
+    except Exception as erro:
+      logger.warning("Falha ao gravar auditoria de captcha: %s", erro)
+
+  def limpar_auditoria_antiga(self, dias: int = 15) -> int:
+    with self._db.cursor() as cursor:
+      if self._multi_tenant:
+        cursor.execute(
+          "DELETE FROM robo_auditoria WHERE cliente_id = %s "
+          "AND created_at < NOW() - INTERVAL %s DAY",
+          (self._cliente_id, max(1, int(dias))),
+        )
+      else:
+        cursor.execute(
+          "DELETE FROM robo_auditoria WHERE created_at < NOW() - INTERVAL %s DAY",
+          (max(1, int(dias)),),
         )
       return cursor.rowcount
 
